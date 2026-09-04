@@ -7,7 +7,7 @@ defmodule Xamal.ServerTasks do
   import Xamal.Output
   import Xamal.Remote, only: [read_active_port: 2]
 
-  alias Xamal.Commands.{Caddy, Server, Systemd}
+  alias Xamal.Commands.{Caddy, Server, Service}
   alias Xamal.{Configuration, Context, SSH}
 
   def exec(args, _opts, context) do
@@ -45,7 +45,7 @@ defmodule Xamal.ServerTasks do
 
         {:error, _} ->
           say("  Installing Caddy on #{host}...", :magenta)
-          install_cmd = Caddy.install()
+          install_cmd = Caddy.install(config)
           SSH.execute_command(host, install_cmd, ssh_config: config.ssh, timeout: 120_000)
       end
 
@@ -53,10 +53,10 @@ defmodule Xamal.ServerTasks do
       bootstrap_cmd = Server.bootstrap(config)
       SSH.execute_command(host, bootstrap_cmd, ssh_config: config.ssh)
 
-      # Install systemd service unit
-      say("  Installing systemd service unit on #{host}...", :magenta)
+      # Install service unit (systemd unit or rc.d scripts, depending on os)
+      say("  Installing service unit on #{host}...", :magenta)
 
-      SSH.execute_command(host, Systemd.install_unit(config), ssh_config: config.ssh)
+      SSH.execute_command(host, Service.install_unit(config), ssh_config: config.ssh)
 
       # Generate the Caddyfile against whichever port is serving right now.
       #
@@ -72,7 +72,7 @@ defmodule Xamal.ServerTasks do
       SSH.execute_command(host, caddyfile_cmd, ssh_config: config.ssh)
 
       # Point system Caddyfile to import service Caddyfiles (survives reboot)
-      SSH.execute_command(host, Caddy.configure_system_caddyfile(), ssh_config: config.ssh)
+      SSH.execute_command(host, Caddy.configure_system_caddyfile(config), ssh_config: config.ssh)
 
       # Start/reload Caddy
       SSH.execute_command(host, Caddy.reload(config), ssh_config: config.ssh)
@@ -99,6 +99,6 @@ defmodule Xamal.ServerTasks do
     config = context.config
     log_opts = parse_log_opts(args)
 
-    dispatch_logs(log_opts, &Caddy.logs/1, config, [type: "Server"], context)
+    dispatch_logs(log_opts, &Caddy.logs(config, &1), config, [type: "Server"], context)
   end
 end

@@ -8,10 +8,21 @@ defmodule Xamal.Commands.Caddy do
   alias Xamal.Configuration
   alias Xamal.Configuration.Caddy, as: CaddyConfig
 
+  @freebsd_caddyfile "/usr/local/etc/caddy/Caddyfile"
+  @freebsd_logfile "/var/log/caddy/caddy.log"
+
   @doc """
-  Install Caddy via apt on Debian/Ubuntu.
+  Install Caddy: via apt on Debian/Ubuntu, or via pkg on FreeBSD.
   """
-  def install do
+  def install(config) do
+    if Configuration.freebsd?(config) do
+      ["sudo", "pkg", "install", "-y", "caddy"]
+    else
+      install_via_apt()
+    end
+  end
+
+  defp install_via_apt do
     combine([
       ["sudo", "apt-get", "install", "-y", "apt-transport-https", "curl"],
       pipe([
@@ -71,13 +82,13 @@ defmodule Xamal.Commands.Caddy do
   end
 
   @doc """
-  Replace /etc/caddy/Caddyfile with an import directive so Caddy picks up
+  Replace the system Caddyfile with an import directive so Caddy picks up
   service Caddyfiles on reboot.
   """
-  def configure_system_caddyfile do
+  def configure_system_caddyfile(config) do
     pipe([
       ["echo", "'import /opt/xamal/*/Caddyfile'"],
-      ["sudo", "tee", "/etc/caddy/Caddyfile"]
+      ["sudo", "tee", system_caddyfile_path(config)]
     ])
   end
 
@@ -105,8 +116,12 @@ defmodule Xamal.Commands.Caddy do
   @doc """
   Check Caddy status.
   """
-  def status do
-    ["systemctl", "is-active", "caddy"]
+  def status(config) do
+    if Configuration.freebsd?(config) do
+      ["service", "caddy", "status"]
+    else
+      ["systemctl", "is-active", "caddy"]
+    end
   end
 
   @doc """
@@ -127,10 +142,24 @@ defmodule Xamal.Commands.Caddy do
   end
 
   @doc """
-  Get Caddy proxy logs via journalctl.
+  Get Caddy proxy logs.
+
+  Uses journalctl on Linux. On FreeBSD, the `www/caddy` package's own rc.d
+  script logs to `/var/log/caddy/caddy.log` (no journald equivalent), so this
+  tails that file instead; `since` has no effect there since plain log lines
+  carry no filterable timestamp prefix.
+
   Options: lines (default 100), since, grep, follow.
   """
-  def logs(opts \\ []) do
+  def logs(config, opts \\ []) do
+    if Configuration.freebsd?(config) do
+      freebsd_logs(opts)
+    else
+      journalctl_logs(opts)
+    end
+  end
+
+  defp journalctl_logs(opts) do
     since = Keyword.get(opts, :since)
     lines = Keyword.get(opts, :lines, 100)
     grep = Keyword.get(opts, :grep)
@@ -148,11 +177,38 @@ defmodule Xamal.Commands.Caddy do
     end
   end
 
+  defp freebsd_logs(opts) do
+    lines = Keyword.get(opts, :lines, 100)
+    grep = Keyword.get(opts, :grep)
+    follow = Keyword.get(opts, :follow, false)
+
+    cmd =
+      if follow do
+        ["tail", "-F", @freebsd_logfile]
+      else
+        ["tail", "-n", "#{lines}", @freebsd_logfile]
+      end
+
+    if grep do
+      pipe([cmd, ["grep", Xamal.Utils.shell_escape(grep)]])
+    else
+      cmd
+    end
+  end
+
   defp caddyfile_path(config) do
     "#{Configuration.service_directory(config)}/Caddyfile"
   end
 
   defp active_port_path(config) do
     "#{Configuration.service_directory(config)}/active_port"
+  end
+
+  defp system_caddyfile_path(config) do
+    if Configuration.freebsd?(config) do
+      @freebsd_caddyfile
+    else
+      "/etc/caddy/Caddyfile"
+    end
   end
 end

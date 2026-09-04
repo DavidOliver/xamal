@@ -17,6 +17,7 @@ defmodule Xamal.Configuration do
     :deploy_timeout,
     :drain_timeout,
     :retain_releases,
+    :os,
     :require_destination,
     :primary_role_name,
     :secrets,
@@ -92,6 +93,7 @@ defmodule Xamal.Configuration do
       deploy_timeout: Map.get(raw_config, "deploy_timeout", 30),
       drain_timeout: Map.get(raw_config, "drain_timeout", 30),
       retain_releases: Map.get(raw_config, "retain_releases", 5),
+      os: Map.get(raw_config, "os", "linux"),
       require_destination: Map.get(raw_config, "require_destination", false),
       primary_role_name: Map.get(raw_config, "primary_role", "web"),
       secrets: secrets,
@@ -152,6 +154,17 @@ defmodule Xamal.Configuration do
 
   def require_destination?(%__MODULE__{raw_config: raw}),
     do: Map.get(raw, "require_destination", false)
+
+  @doc """
+  The target server OS: `"linux"` (default, systemd) or `"freebsd"` (rc.d/daemon(8)).
+  """
+  def os(%__MODULE__{os: os}) when is_binary(os), do: os
+  def os(%__MODULE__{raw_config: raw}), do: Map.get(raw, "os", "linux")
+
+  @doc """
+  Whether this destination targets a FreeBSD host (rc.d + daemon(8) instead of systemd).
+  """
+  def freebsd?(%__MODULE__{} = config), do: os(config) == "freebsd"
 
   def primary_role_name(%__MODULE__{primary_role_name: primary_role_name})
       when is_binary(primary_role_name),

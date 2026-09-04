@@ -130,10 +130,23 @@ defmodule Xamal.Commands.App do
   end
 
   @doc """
-  Get logs via journalctl for the release service.
-  Uses systemd journal since we run as a daemon.
+  Get logs for the release service.
+
+  Uses journalctl (systemd journal) on Linux. On FreeBSD there's no journal;
+  each rc.d instance's daemon(8) supervisor appends to its own logfile under
+  `<service_dir>/log/`, so this tails that file (or both port instances'
+  files when no port is given). `since` has no effect there — see
+  `Xamal.Commands.Caddy.logs/2` for the same caveat.
   """
   def logs(config, opts \\ []) do
+    if Configuration.freebsd?(config) do
+      freebsd_logs(config, opts)
+    else
+      journalctl_logs(config, opts)
+    end
+  end
+
+  defp journalctl_logs(config, opts) do
     since = Keyword.get(opts, :since)
     lines = Keyword.get(opts, :lines, 100)
     grep = Keyword.get(opts, :grep)
@@ -159,6 +172,37 @@ defmodule Xamal.Commands.App do
     else
       cmd
     end
+  end
+
+  defp freebsd_logs(config, opts) do
+    lines = Keyword.get(opts, :lines, 100)
+    grep = Keyword.get(opts, :grep)
+    follow = Keyword.get(opts, :follow, false)
+    port = Keyword.get(opts, :port)
+
+    files =
+      if port do
+        [freebsd_logfile(config, port)]
+      else
+        ports(config) |> Enum.map(&freebsd_logfile(config, &1))
+      end
+
+    cmd = if follow, do: ["tail", "-F" | files], else: ["tail", "-n", "#{lines}" | files]
+
+    if grep do
+      pipe([cmd, ["grep", Xamal.Utils.shell_escape(grep)]])
+    else
+      cmd
+    end
+  end
+
+  defp freebsd_logfile(config, port) do
+    "#{Configuration.service_directory(config)}/log/#{config.release.name}_#{port}.log"
+  end
+
+  defp ports(config) do
+    app_port = config.caddy.app_port
+    [app_port, Configuration.Caddy.alt_port(config.caddy)]
   end
 
   @doc """

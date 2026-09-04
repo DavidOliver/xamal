@@ -18,6 +18,8 @@ defmodule Xamal.Commands.AppTest do
 
   @role %Xamal.Configuration.Role{name: "web", hosts: ["1.2.3.4"]}
 
+  @freebsd_config %{@config | raw_config: Map.put(@config.raw_config, "os", "freebsd")}
+
   describe "start/3" do
     test "builds daemon start command" do
       cmd = App.start(@config, @role, 4000)
@@ -106,6 +108,37 @@ defmodule Xamal.Commands.AppTest do
       cmd_str = Enum.join(cmd, " ")
 
       assert cmd_str =~ "-f"
+    end
+
+    test "on freebsd, tails both port logfiles when no port given" do
+      cmd = App.logs(@freebsd_config, lines: 50)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "tail -n 50"
+      assert cmd_str =~ "/opt/xamal/my-app/log/my_app_4000.log"
+      assert cmd_str =~ "/opt/xamal/my-app/log/my_app_4001.log"
+    end
+
+    test "on freebsd, tails only the given port's logfile" do
+      cmd = App.logs(@freebsd_config, lines: 50, port: 4000)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "/opt/xamal/my-app/log/my_app_4000.log"
+      refute cmd_str =~ "4001.log"
+    end
+
+    test "on freebsd, follows with tail -F" do
+      cmd = App.logs(@freebsd_config, follow: true, port: 4000)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "tail -F /opt/xamal/my-app/log/my_app_4000.log"
+    end
+
+    test "on freebsd, pipes through grep" do
+      cmd = App.logs(@freebsd_config, grep: "error", port: 4000)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "grep"
     end
   end
 

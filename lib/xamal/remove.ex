@@ -10,7 +10,7 @@ defmodule Xamal.Remove do
 
   alias Xamal.AppTasks
   alias Xamal.Commands.Server, as: ServerCommand
-  alias Xamal.Commands.Systemd
+  alias Xamal.Commands.Service
 
   def run(_args, opts, context) do
     confirming("This will remove all releases and Caddy config. Are you sure?", opts, fn ->
@@ -33,9 +33,9 @@ defmodule Xamal.Remove do
   end
 
   defp remove_systemd(config, context) do
-    say("Removing systemd units...", :magenta)
-    on_hosts(Systemd.disable_all(config), context)
-    on_hosts(Systemd.remove_unit(config), context)
+    say("Removing service units...", :magenta)
+    on_hosts(Service.disable_all(config), context)
+    on_hosts(Service.remove_unit(config), context)
   end
 
   defp remove_service_directory(config, context) do

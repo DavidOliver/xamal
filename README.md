@@ -26,8 +26,8 @@ Docker-specific configuration (image, registry, Dockerfile, build args, etc.) is
 
 **On each target server:**
 
-- A systemd-based Linux host with SSH enabled
-- Caddy — `mix xamal.server.bootstrap` (run as part of `mix xamal.setup`) installs Caddy and the systemd service unit for you if they are not already present
+- A systemd-based Linux host with SSH enabled, or a FreeBSD host (rc.d + daemon(8) — set `os: "freebsd"`, see `mix xamal.docs os`)
+- Caddy — `mix xamal.server.bootstrap` (run as part of `mix xamal.setup`) installs Caddy and the service unit(s) for you if they are not already present
 
 ## Install
 

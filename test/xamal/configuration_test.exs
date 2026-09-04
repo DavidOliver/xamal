@@ -90,6 +90,14 @@ defmodule Xamal.ConfigurationTest do
       assert Configuration.deploy_timeout(config) == 30
       assert Configuration.drain_timeout(config) == 30
       assert Configuration.retain_releases(config) == 5
+      assert Configuration.os(config) == "linux"
+      refute Configuration.freebsd?(config)
+    end
+
+    test "parses os" do
+      config = Configuration.new(Map.put(@valid_config, "os", "freebsd"))
+      assert Configuration.os(config) == "freebsd"
+      assert Configuration.freebsd?(config)
     end
 
     test "directory helpers" do
@@ -121,6 +129,14 @@ defmodule Xamal.ConfigurationTest do
       bad_config = Map.put(@valid_config, "retain_releases", 0)
 
       assert_raise ArgumentError, ~r/Must retain at least 1/, fn ->
+        Configuration.new(bad_config)
+      end
+    end
+
+    test "rejects unsupported os" do
+      bad_config = Map.put(@valid_config, "os", "windows")
+
+      assert_raise ArgumentError, ~r/Unsupported os/, fn ->
         Configuration.new(bad_config)
       end
     end

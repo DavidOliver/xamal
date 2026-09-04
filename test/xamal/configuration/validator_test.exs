@@ -55,5 +55,21 @@ defmodule Xamal.Configuration.ValidatorTest do
         Configuration.new(config)
       end
     end
+
+    test "accepts os: linux" do
+      config = Configuration.new(Map.put(@valid_config, "os", "linux"))
+      assert Configuration.os(config) == "linux"
+    end
+
+    test "accepts os: freebsd" do
+      config = Configuration.new(Map.put(@valid_config, "os", "freebsd"))
+      assert Configuration.os(config) == "freebsd"
+    end
+
+    test "rejects an unrecognized os" do
+      assert_raise ArgumentError, ~r/Unsupported os/, fn ->
+        Configuration.new(Map.put(@valid_config, "os", "plan9"))
+      end
+    end
   end
 end

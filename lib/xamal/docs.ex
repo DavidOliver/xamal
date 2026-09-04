@@ -19,6 +19,7 @@ defmodule Xamal.Docs do
     Topics:
       config          config/xamal.exs overview and structure
       servers         Server and role configuration
+      os              Target server OS (systemd vs. rc.d/FreeBSD)
       ssh             SSH connection options
       caddy           Caddy reverse proxy and TLS
       env             Environment variables (clear and secret)
@@ -49,6 +50,7 @@ defmodule Xamal.Docs do
 
       :service            App name (required)
       :servers            Server/role definitions (required)
+      :os                 Target server OS: "linux" (default) or "freebsd"
       :ssh                SSH connection options
       :caddy              Reverse proxy configuration
       :env                Environment variables
@@ -101,6 +103,48 @@ defmodule Xamal.Docs do
 
     The primary role (default: "web") is used for lock management and
     single-host operations like `mix xamal.app.exec`.
+
+    All hosts for a given destination must run the same OS — see
+    `mix xamal.docs os`.
+    """)
+  end
+
+  defp print_topic("os") do
+    IO.puts("""
+    # Target Server OS
+
+      os: "linux"      # default: systemd + journalctl
+      os: "freebsd"     # rc.d + daemon(8), no journal
+
+    Selects the service-manager backend `mix xamal.server.bootstrap` and
+    `mix xamal.app.boot` use to run the release, and (on FreeBSD) how Caddy
+    is installed and its logs are read. It's a single destination-wide
+    setting — see `mix xamal.docs destinations` if staging and production
+    run different OSes.
+
+    ## linux (systemd)
+
+    One template unit (`<release>@.service`), instantiated per port
+    (`<release>@4000`, `<release>@4001`). Crash recovery via
+    `Restart=on-failure`; logs via `mix xamal.app.logs` / `mix xamal.server.logs`
+    (journalctl).
+
+    ## freebsd (rc.d + daemon(8))
+
+    rc.d has no template units, so bootstrap generates two fixed scripts up
+    front instead — one per blue-green port
+    (`/usr/local/etc/rc.d/<release>_4000`, `..._4001`). Each runs the release
+    under `daemon(8)` for restart-on-failure (`-R 5`, matching systemd's
+    `RestartSec=5`); stopping enforces `drain_timeout` before escalating to
+    SIGKILL, since rc.subr's own stop has no such timeout.
+
+    There's no journal: output goes to `<service_dir>/log/<release>_<port>.log`,
+    which `mix xamal.app.logs` tails instead. `--since` has no effect on
+    FreeBSD logs (no journalctl equivalent for filtering by timestamp).
+
+    Caddy installs via `pkg` instead of `apt`, and its own logs come from
+    `/var/log/caddy/caddy.log` (the `www/caddy` package's default) rather
+    than journalctl.
     """)
   end
 

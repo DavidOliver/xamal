@@ -6,6 +6,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- FreeBSD support: set `os: "freebsd"` to target rc.d + `daemon(8)` instead of
+  systemd. Since rc.d has no template units, `mix xamal.server.bootstrap`
+  generates two fixed per-port scripts up front instead of one template;
+  each runs the release under `daemon(8) -R 5` for restart-on-failure
+  (rc.d itself doesn't supervise processes) and enforces `drain_timeout`
+  with a SIGKILL fallback on stop (rc.subr's default stop has no timeout of
+  its own). Caddy installs via `pkg` instead of `apt`, and logs (both
+  Caddy's and the release's) are tailed from log files instead of
+  `journalctl`, which FreeBSD doesn't have. See `mix xamal.docs os`.
+  `Xamal.Commands.Systemd` and the new `Xamal.Commands.RcD` are dispatched
+  through `Xamal.Commands.Service` based on this setting; callers
+  (`Xamal.AppTasks`, `Xamal.BlueGreen`, `Xamal.ServerTasks`, `Xamal.Remove`)
+  no longer reference either backend directly.
+
 ## [0.4.2]
 
 ### Fixed
