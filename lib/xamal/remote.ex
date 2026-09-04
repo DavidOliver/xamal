@@ -57,7 +57,7 @@ defmodule Xamal.Remote do
   swap) would take the site down, so this raises instead.
   """
   def reload_caddy!(host, config) do
-    case ssh_exec(host, Caddy.reload(), config) do
+    case ssh_exec(host, Caddy.reload(config), config) do
       {:ok, _} ->
         :ok
 

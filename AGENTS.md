@@ -22,6 +22,7 @@ Xamal is a Mix-first Elixir deployment tool for bare-metal Elixir releases over 
 - `lib/xamal/output.ex`, `hooks.ex`, `remote.ex`, `deploy_lock.ex`, `blue_green.ex`, `logs.ex`, `task_helpers.ex` — runtime helpers for output, hooks, SSH execution, locking, blue-green boot, logs, and task concerns
 - `lib/xamal/secrets/adapters/` — secret-manager adapter implementations used by `Xamal.SecretTasks`
 - `lib/xamal/commands/` — pure functions returning command lists (`["cmd", "arg1"]`), composed with `combine/pipe/chain`
+- `lib/xamal/commands/service.ex` — dispatches to `systemd.ex` (Linux, default) or `rc_d.ex` (FreeBSD, `os: "freebsd"`); callers use this, never the backends directly
 - `lib/xamal/configuration/` — structs with `new/1` constructors parsing Elixir config data
 - `lib/xamal/context.ex` — explicit runtime context for config, host/role filters, verbosity, lock, and connection state
 

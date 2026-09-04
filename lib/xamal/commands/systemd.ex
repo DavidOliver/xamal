@@ -9,6 +9,7 @@ defmodule Xamal.Commands.Systemd do
 
   import Xamal.Commands.Base
 
+  alias Xamal.Commands.Ports
   alias Xamal.Configuration
   alias Xamal.Configuration.{Caddy, Role}
 
@@ -128,28 +129,12 @@ defmodule Xamal.Commands.Systemd do
   @doc """
   Stop both port instances (tolerates failures via chain).
   """
-  def stop_all(config) do
-    app_port = config.caddy.app_port
-    alt_port = Caddy.alt_port(config.caddy)
-
-    chain([
-      stop(config, app_port),
-      stop(config, alt_port)
-    ])
-  end
+  def stop_all(config), do: Ports.chain_both(config, &stop(config, &1))
 
   @doc """
   Disable both port instances from boot-time startup.
   """
-  def disable_all(config) do
-    app_port = config.caddy.app_port
-    alt_port = Caddy.alt_port(config.caddy)
-
-    chain([
-      disable(config, app_port),
-      disable(config, alt_port)
-    ])
-  end
+  def disable_all(config), do: Ports.chain_both(config, &disable(config, &1))
 
   @doc """
   Remove the unit file and reload systemd.
@@ -202,6 +187,32 @@ defmodule Xamal.Commands.Systemd do
       ["awk", "'{print $1}'"],
       ["grep", "-vxF" | own]
     ])
+  end
+
+  @doc """
+  How bootstrap names this app's unit in a conflict message.
+  """
+  def unit_label(config), do: "systemd unit #{config.release.name}@.service"
+
+  @doc """
+  Release names found by `units_under_other_names/1`, and the shell commands
+  that stop and remove them.
+  """
+  def rename_cleanup(config, found) do
+    old_names =
+      found
+      |> String.split("\n", trim: true)
+      |> Enum.map(&(&1 |> Path.basename() |> String.replace_suffix("@.service", "")))
+
+    ports = [config.caddy.app_port, Caddy.alt_port(config.caddy)]
+
+    commands =
+      Enum.flat_map(old_names, fn old ->
+        instances = Enum.map_join(ports, " ", &"#{old}@#{&1}")
+        ["sudo systemctl disable --now #{instances}", "sudo rm #{@unit_dir}/#{old}@.service"]
+      end)
+
+    {old_names, commands ++ ["sudo systemctl daemon-reload"]}
   end
 
   defp unit_path(config) do

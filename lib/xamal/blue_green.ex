@@ -5,7 +5,7 @@ defmodule Xamal.BlueGreen do
   import Xamal.Output
   import Xamal.Remote
 
-  alias Xamal.Commands.{Caddy, Server, Systemd}
+  alias Xamal.Commands.{Caddy, Server, Service}
   alias Xamal.{Configuration, HealthCheck}
 
   def swap(host, config, version, opts, context) do
@@ -13,7 +13,7 @@ defmodule Xamal.BlueGreen do
     ports = select_ports(host, config)
     sync_unit(host, config)
     ssh_exec(host, Server.link_current(config, version), config)
-    ssh_exec(host, Systemd.start(config, ports.new), config)
+    ssh_exec(host, Service.start(config, ports.new), config)
     wait_for_health!(host, config, ports.new, Keyword.get(opts, :rollback_version))
     reload_caddy(host, config, ports.new, Keyword.get(opts, :skip_hooks, true), context)
     stop_old_release(host, config, ports)
@@ -27,17 +27,14 @@ defmodule Xamal.BlueGreen do
   # The new definition applies to the instance started next in this swap; the
   # serving instance keeps running.
   defp sync_unit(host, config) do
-    case ssh_exec(host, Systemd.sync_unit(config), config) do
+    case ssh_exec(host, Service.sync_unit(config), config) do
       {:ok, output} ->
         if output =~ "unit-updated" do
-          say(
-            "  Updated systemd unit #{config.release.name}@.service on #{host_label(config, host)}",
-            :yellow
-          )
+          say("  Updated #{Service.unit_label(config)} on #{host_label(config, host)}", :yellow)
         end
 
       {:error, reason} ->
-        raise "Failed to update the systemd unit on #{host_label(config, host)}: #{inspect(reason)}"
+        raise "Failed to update the #{Service.unit_label(config)} on #{host_label(config, host)}: #{inspect(reason)}"
     end
   end
 
@@ -45,7 +42,7 @@ defmodule Xamal.BlueGreen do
   # stop instances that were never running, leaving the old-named instance
   # serving on its port and enabled for reboot. Stop before touching anything.
   defp refuse_renamed_release!(host, config) do
-    case ssh_exec(host, Systemd.units_under_other_names(config), config) do
+    case ssh_exec(host, Service.units_under_other_names(config), config) do
       {:ok, found} -> raise renamed_release_message(host, config, found)
       {:error, _} -> :ok
     end
@@ -53,20 +50,8 @@ defmodule Xamal.BlueGreen do
 
   @doc false
   def renamed_release_message(host, config, found) do
-    old_names =
-      found
-      |> String.split("\n", trim: true)
-      |> Enum.map(&(&1 |> Path.basename() |> String.replace_suffix("@.service", "")))
-
-    ports = [config.caddy.app_port, Configuration.Caddy.alt_port(config.caddy)]
-
-    cleanup =
-      Enum.map_join(old_names, "\n", fn old ->
-        instances = Enum.map_join(ports, " ", &"#{old}@#{&1}")
-
-        "    sudo systemctl disable --now #{instances}\n" <>
-          "    sudo rm /etc/systemd/system/#{old}@.service"
-      end)
+    {old_names, commands} = Service.rename_cleanup(config, found)
+    cleanup = Enum.map_join(commands, "\n", &"    #{&1}")
 
     """
     #{host_label(config, host)} runs this app under a different release name (#{Enum.join(old_names, ", ")}), \
@@ -77,7 +62,6 @@ defmodule Xamal.BlueGreen do
     old units, then bootstrap and deploy under the new name.
 
     #{cleanup}
-        sudo systemctl daemon-reload
 
     Then run: mix xamal.server.bootstrap && mix xamal.deploy
 
@@ -120,7 +104,7 @@ defmodule Xamal.BlueGreen do
 
   defp rollback_failed_boot(host, config, new_port, rollback_version) do
     say("  Health check timed out on #{host_label(config, host)} (port #{new_port})!", :red)
-    ssh_exec(host, Systemd.stop(config, new_port), config)
+    ssh_exec(host, Service.stop(config, new_port), config)
 
     if rollback_version do
       ssh_exec(host, Server.link_current(config, rollback_version), config)
@@ -138,16 +122,16 @@ defmodule Xamal.BlueGreen do
        when active_port != new_port do
     drain = Configuration.drain_timeout(config)
     say("  Stopping old release (#{drain}s drain timeout)...", :magenta)
-    ssh_exec(host, Systemd.stop(config, active_port), config)
+    ssh_exec(host, Service.stop(config, active_port), config)
   end
 
   defp stop_old_release(_host, _config, _ports), do: :ok
 
   defp enable_new_release(host, config, %{active: active_port, new: new_port}) do
-    ssh_exec(host, Systemd.enable(config, new_port), config)
+    ssh_exec(host, Service.enable(config, new_port), config)
 
     if active_port != new_port do
-      ssh_exec(host, Systemd.disable(config, active_port), config)
+      ssh_exec(host, Service.disable(config, active_port), config)
     end
   end
 end

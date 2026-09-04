@@ -10,7 +10,7 @@ defmodule Xamal.AppTasks do
   alias Xamal.Commands.App, as: AppCommand
   alias Xamal.Commands.Base, as: CommandBase
   alias Xamal.Commands.Caddy
-  alias Xamal.Commands.Systemd
+  alias Xamal.Commands.Service
   alias Xamal.Configuration
   alias Xamal.Context
   alias Xamal.EnvFile
@@ -32,7 +32,7 @@ defmodule Xamal.AppTasks do
 
     Enum.each(hosts, fn host ->
       say("  Stopping on #{host_label(config, host)}...", :magenta)
-      cmd = Systemd.stop_all(config)
+      cmd = Service.stop_all(config)
 
       case SSH.execute_command(host, cmd, ssh_config: config.ssh) do
         {:ok, _} -> say("  Stopped on #{host_label(config, host)}", :green)
@@ -90,7 +90,7 @@ defmodule Xamal.AppTasks do
   end
 
   @doc """
-  Starts the systemd service on the currently active port without a full boot.
+  Starts the service on the currently active port without a full boot.
 
   Use this to bring an app back up after `mix xamal.app.stop`; `mix xamal.app.boot`
   performs the heavier zero-downtime swap instead.
@@ -101,7 +101,7 @@ defmodule Xamal.AppTasks do
     Enum.each(Context.hosts(context), fn host ->
       active_port = read_active_port(host, config) || config.caddy.app_port
       say("  Starting on #{host_label(config, host)} (port #{active_port})...", :magenta)
-      cmd = Systemd.start(config, active_port)
+      cmd = Service.start(config, active_port)
 
       case SSH.execute_command(host, cmd, ssh_config: config.ssh) do
         {:ok, _} ->
@@ -312,7 +312,7 @@ defmodule Xamal.AppTasks do
       EnvFile.encode_shell(env)
     )
 
-    ssh_exec(host, Systemd.write_env_symlink(config, role), config)
+    ssh_exec(host, Service.write_env_symlink(config, role), config)
   end
 
   # 0600: the files hold secrets, and systemd reads them as root.

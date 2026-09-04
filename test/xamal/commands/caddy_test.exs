@@ -15,20 +15,60 @@ defmodule Xamal.Commands.CaddyTest do
     health_check: %Xamal.Configuration.HealthCheck{}
   }
 
-  describe "install/0" do
-    test "installs via apt" do
-      cmd = Caddy.install()
+  @freebsd_config %{@config | raw_config: Map.put(@config.raw_config, "os", "freebsd")}
+
+  describe "install/1" do
+    test "installs via apt on linux" do
+      cmd = Caddy.install(@config)
       cmd_str = Enum.join(cmd, " ")
 
       assert cmd_str =~ "apt-get"
       assert cmd_str =~ "caddy"
       assert cmd_str =~ "curl"
     end
+
+    test "installs via pkg on freebsd" do
+      assert Caddy.install(@freebsd_config) == ["sudo", "pkg", "install", "-y", "caddy"]
+    end
   end
 
   describe "check_installed/0" do
     test "checks caddy version" do
       assert Caddy.check_installed() == ["caddy", "version"]
+    end
+  end
+
+  describe "status/1" do
+    test "checks via systemctl on linux" do
+      assert Caddy.status(@config) == ["systemctl", "is-active", "caddy"]
+    end
+
+    test "checks via service on freebsd" do
+      assert Caddy.status(@freebsd_config) == ["service", "caddy", "status"]
+    end
+  end
+
+  describe "logs/2" do
+    test "uses journalctl on linux" do
+      cmd = Caddy.logs(@config, lines: 50)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "journalctl"
+      assert cmd_str =~ "-n 50"
+    end
+
+    test "tails the caddy logfile on freebsd" do
+      cmd = Caddy.logs(@freebsd_config, lines: 50)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "tail -n 50 /var/log/caddy/caddy.log"
+    end
+
+    test "follows with tail -F on freebsd" do
+      cmd = Caddy.logs(@freebsd_config, follow: true)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "tail -F /var/log/caddy/caddy.log"
     end
   end
 
@@ -43,21 +83,27 @@ defmodule Xamal.Commands.CaddyTest do
     end
   end
 
-  describe "reload/0" do
+  describe "reload/1" do
     test "reloads from the system Caddyfile so every app on the host stays loaded" do
-      assert Caddy.reload() == ["sudo", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"]
+      assert Caddy.reload(@config) ==
+               ["sudo", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"]
+    end
+
+    test "uses the FreeBSD system Caddyfile on freebsd" do
+      assert Caddy.reload(@freebsd_config) ==
+               ["sudo", "caddy", "reload", "--config", "/usr/local/etc/caddy/Caddyfile"]
     end
   end
 
-  describe "start/0" do
+  describe "start/1" do
     test "starts from the system Caddyfile" do
-      assert Caddy.start() == ["caddy", "start", "--config", "/etc/caddy/Caddyfile"]
+      assert Caddy.start(@config) == ["caddy", "start", "--config", "/etc/caddy/Caddyfile"]
     end
   end
 
-  describe "install/0 system Caddyfile" do
+  describe "install/1 system Caddyfile" do
     test "replaces the package's default site with the import line" do
-      cmd_str = Enum.join(Caddy.install(), " ")
+      cmd_str = Enum.join(Caddy.install(@config), " ")
 
       assert cmd_str =~ "echo 'import /opt/xamal/*/Caddyfile' | sudo tee /etc/caddy/Caddyfile"
     end
@@ -99,20 +145,34 @@ defmodule Xamal.Commands.CaddyTest do
     end
   end
 
-  describe "configure_system_caddyfile/0" do
+  describe "configure_system_caddyfile/1" do
     test "runs the import script with sudo against the system Caddyfile" do
-      [sudo, "sh", "-c", script] = Caddy.configure_system_caddyfile()
+      [sudo, "sh", "-c", script] = Caddy.configure_system_caddyfile(@config)
 
       assert sudo == "sudo"
       assert script =~ "grep -qxF"
       assert script =~ "import /opt/xamal/*/Caddyfile"
       assert script =~ ">> /etc/caddy/Caddyfile"
     end
+
+    test "targets /usr/local/etc/caddy/Caddyfile on freebsd" do
+      [_sudo, "sh", "-c", script] = Caddy.configure_system_caddyfile(@freebsd_config)
+
+      assert script =~ ">> /usr/local/etc/caddy/Caddyfile"
+      refute script =~ " /etc/caddy/Caddyfile"
+    end
   end
 
-  describe "enable/0" do
+  describe "enable/1" do
     test "enables and starts the caddy service" do
-      assert Caddy.enable() == ["sudo", "systemctl", "enable", "--now", "caddy"]
+      assert Caddy.enable(@config) == ["sudo", "systemctl", "enable", "--now", "caddy"]
+    end
+
+    test "enables via sysrc and starts caddy if it isn't running on freebsd" do
+      cmd_str = Enum.join(Caddy.enable(@freebsd_config), " ")
+
+      assert cmd_str =~ "sudo sysrc caddy_enable=YES"
+      assert cmd_str =~ "service caddy status || sudo service caddy start"
     end
   end
 

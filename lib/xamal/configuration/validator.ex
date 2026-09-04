@@ -12,6 +12,7 @@ defmodule Xamal.Configuration.Validator do
     validate_retain_releases!(config)
     validate_destination!(config)
     validate_ssh_proxy!(config)
+    validate_os!(config)
     :ok
   end
 
@@ -122,6 +123,14 @@ defmodule Xamal.Configuration.Validator do
   defp validate_destination!(config) do
     if Configuration.require_destination?(config) and config.destination == nil do
       raise ArgumentError, "You must specify a destination"
+    end
+  end
+
+  defp validate_os!(config) do
+    os = Configuration.os(config)
+
+    unless os in ["linux", "freebsd"] do
+      raise ArgumentError, "Unsupported os: #{inspect(os)}. Must be \"linux\" or \"freebsd\""
     end
   end
 end

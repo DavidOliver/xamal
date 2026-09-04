@@ -7,7 +7,7 @@ defmodule Xamal.ServerTasks do
   import Xamal.Output
   import Xamal.Remote, only: [read_active_port: 2, reload_caddy!: 2]
 
-  alias Xamal.Commands.{Caddy, Server, Systemd}
+  alias Xamal.Commands.{Caddy, Server, Service}
   alias Xamal.{Configuration, Context, SSH}
 
   def exec(args, _opts, context) do
@@ -48,7 +48,7 @@ defmodule Xamal.ServerTasks do
 
         {:error, _} ->
           say("  Installing Caddy on #{host_label(config, host)}...", :magenta)
-          install_cmd = Caddy.install()
+          install_cmd = Caddy.install(config)
           SSH.execute_command(host, install_cmd, ssh_config: config.ssh, timeout: 120_000)
       end
 
@@ -60,10 +60,13 @@ defmodule Xamal.ServerTasks do
       bootstrap_cmd = Server.bootstrap(config)
       SSH.execute_command(host, bootstrap_cmd, ssh_config: config.ssh)
 
-      # Install systemd service unit
-      say("  Installing systemd service unit on #{host_label(config, host)}...", :magenta)
+      # Install the service unit (systemd unit or rc.d scripts, depending on os)
+      say(
+        "  Installing #{Service.unit_label(config)} on #{host_label(config, host)}...",
+        :magenta
+      )
 
-      SSH.execute_command(host, Systemd.install_unit(config), ssh_config: config.ssh)
+      SSH.execute_command(host, Service.install_unit(config), ssh_config: config.ssh)
 
       # Generate the Caddyfile against whichever port is serving right now.
       #
@@ -80,9 +83,9 @@ defmodule Xamal.ServerTasks do
 
       # Make sure the system Caddyfile imports every service Caddyfile
       # (appends the import line only if missing; nothing else is touched).
-      SSH.execute_command(host, Caddy.configure_system_caddyfile(), ssh_config: config.ssh)
+      SSH.execute_command(host, Caddy.configure_system_caddyfile(config), ssh_config: config.ssh)
 
-      SSH.execute_command(host, Caddy.enable(), ssh_config: config.ssh)
+      SSH.execute_command(host, Caddy.enable(config), ssh_config: config.ssh)
       reload_caddy!(host, config)
 
       say("  Bootstrapped #{host_label(config, host)}", :green)
@@ -91,7 +94,7 @@ defmodule Xamal.ServerTasks do
 
   # Each check succeeds (exit 0) only when it finds a conflict.
   defp check_host_conflicts!(host, config) do
-    case SSH.execute_command(host, Systemd.units_under_other_names(config),
+    case SSH.execute_command(host, Service.units_under_other_names(config),
            ssh_config: config.ssh
          ) do
       {:ok, found} -> raise Xamal.BlueGreen.renamed_release_message(host, config, found)
@@ -107,13 +110,13 @@ defmodule Xamal.ServerTasks do
 
     checks =
       [
-        {Systemd.unit_owned_by_other_service(config),
+        {Service.unit_owned_by_other_service(config),
          "another app on #{host_label(config, host)} already uses the release name #{inspect(release)} " <>
-           "(systemd unit #{release}@.service). Set a different release.name."},
+           "(#{Service.unit_label(config)}). Set a different release.name."},
         # Ports recorded by other apps' bootstrap, then running units (covers
         # apps bootstrapped before the ports file existed).
         {Server.claimed_port_conflicts(config), port_message},
-        {Systemd.port_conflicts(config), port_message}
+        {Service.port_conflicts(config), port_message}
       ] ++ catch_all_check(host, config)
 
     Enum.each(checks, fn {cmd, message} ->
@@ -155,6 +158,6 @@ defmodule Xamal.ServerTasks do
     config = context.config
     log_opts = parse_log_opts(args)
 
-    dispatch_logs(log_opts, &Caddy.logs/1, config, [type: "Server"], context)
+    dispatch_logs(log_opts, &Caddy.logs(config, &1), config, [type: "Server"], context)
   end
 end
