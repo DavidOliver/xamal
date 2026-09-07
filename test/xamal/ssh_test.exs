@@ -136,6 +136,36 @@ defmodule Xamal.SSHTest do
     end
   end
 
+  describe "ssh_flags/2 and scp_flags/2" do
+    test "ssh_flags uses -p (lowercase) for the port" do
+      args = Xamal.SSH.ssh_flags(%Ssh{user: "d"}, 2222)
+
+      assert ["-p", "2222"] == Enum.take(args, 2)
+    end
+
+    test "scp_flags uses -P (uppercase) for the port" do
+      args = Xamal.SSH.scp_flags(%Ssh{user: "d"}, 2222)
+
+      assert ["-P", "2222"] == Enum.take(args, 2)
+    end
+
+    test "system_ssh_args/3 is ssh_flags/2 plus the user@host destination" do
+      ssh_config = %Ssh{user: "deploy", keys: ["/keys/a"], proxy: "bastion"}
+
+      assert Xamal.SSH.system_ssh_args(ssh_config, "10.0.0.1", 22) ==
+               Xamal.SSH.ssh_flags(ssh_config, 22) ++ ["deploy@10.0.0.1"]
+    end
+
+    test "scp_flags shares the same -o/-i/-J options as ssh_flags, only the port flag differs" do
+      ssh_config = %Ssh{user: "d", keys: ["/keys/a"], proxy: "bastion", keys_only: true}
+
+      ssh_rest = ssh_config |> Xamal.SSH.ssh_flags(22) |> Enum.drop(2)
+      scp_rest = ssh_config |> Xamal.SSH.scp_flags(22) |> Enum.drop(2)
+
+      assert ssh_rest == scp_rest
+    end
+  end
+
   describe "format_error/3" do
     test "includes the host and the joined command" do
       message = Xamal.SSH.format_error("10.0.0.1", ["ls", "-la", "/opt"], :timeout)

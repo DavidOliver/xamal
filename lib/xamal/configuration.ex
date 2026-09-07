@@ -234,6 +234,14 @@ defmodule Xamal.Configuration do
     "#{run_directory()}/#{service(config)}-audit.log"
   end
 
+  @doc """
+  Workspace on the `builder.remote` host where source is synced and the
+  release is built, when using a remote builder.
+  """
+  def build_directory(%__MODULE__{} = config) do
+    "#{run_directory()}/builds/#{service(config)}"
+  end
+
   # Private
 
   defp load_config_files(config_file, destination) do

@@ -63,6 +63,39 @@ defmodule Xamal.Commands.BuilderTest do
     end
   end
 
+  describe "build_release_remote/1" do
+    test "cds into the build directory and bootstraps hex/rebar/asset tools" do
+      cmd = Builder.build_release_remote(@config)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "cd ~/.xamal/builds/my-app"
+      assert cmd_str =~ "mix local.hex --if-missing --force"
+      assert cmd_str =~ "mix local.rebar --if-missing --force"
+      assert cmd_str =~ "MIX_ENV=prod mix deps.get --only prod"
+      assert cmd_str =~ "mix tailwind.install --if-missing"
+      assert cmd_str =~ "mix esbuild.install --if-missing"
+      assert cmd_str =~ "MIX_ENV=prod mix assets.deploy"
+      assert cmd_str =~ "MIX_ENV=prod mix release my_app --overwrite"
+    end
+  end
+
+  describe "create_tarball_remote/1" do
+    test "tars the release directory on the build host" do
+      cmd = Builder.create_tarball_remote(@config)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "tar -czf ~/.xamal/builds/my-app/my_app-abc1234.tar.gz"
+      assert cmd_str =~ "-C ~/.xamal/builds/my-app/_build/prod/rel/my_app"
+    end
+  end
+
+  describe "remote_tarball_path/1" do
+    test "returns the tarball path on the build host" do
+      assert Builder.remote_tarball_path(@config) ==
+               "~/.xamal/builds/my-app/my_app-abc1234.tar.gz"
+    end
+  end
+
   describe "build_in_docker/1" do
     test "builds docker run command with default image" do
       cmd = Builder.build_in_docker(@config)

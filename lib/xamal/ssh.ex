@@ -99,19 +99,37 @@ defmodule Xamal.SSH do
   end
 
   @doc """
-  Build the argument list passed to the system `ssh`/`scp` binaries when
+  Build the argument list passed to the system `ssh` binary when
   `ssh.system_ssh` is enabled (everything up to and including the
-  `user@host` destination — the caller appends the command, for `ssh`, or
-  `scp` appends its own source/destination paths).
+  `user@host` destination — the caller appends the command).
+  """
+  def system_ssh_args(ssh_config, hostname, port) do
+    ssh_flags(ssh_config, port) ++ ["#{ssh_config.user}@#{hostname}"]
+  end
+
+  @doc """
+  The `-o`/`-i`/`-p`/`-F`/`-J` option flags for a system `ssh` invocation,
+  without the trailing `user@host` destination — reusable by anything that
+  needs to compose its own `ssh` invocation (piping into it, `system_ssh_args/3`
+  itself, etc).
 
   `BatchMode=yes` means: authenticate only with what's already available
   (an already-unlocked `ssh-agent`, or an unencrypted key) and fail fast
   with a clear error instead of hanging on a passphrase prompt that,
   invoked this way, has nowhere to be shown.
   """
-  def system_ssh_args(ssh_config, hostname, port) do
+  def ssh_flags(ssh_config, port), do: option_flags(ssh_config, port, "-p")
+
+  @doc """
+  Like `ssh_flags/2`, for a system `scp` invocation — `scp` uses `-P`
+  (uppercase) for the port, unlike `ssh`'s `-p`, but otherwise shares the
+  same `-o`/`-i`/`-F`/`-J` options.
+  """
+  def scp_flags(ssh_config, port), do: option_flags(ssh_config, port, "-P")
+
+  defp option_flags(ssh_config, port, port_flag) do
     [
-      "-p",
+      port_flag,
       to_string(port),
       "-o",
       "BatchMode=yes",
@@ -123,7 +141,6 @@ defmodule Xamal.SSH do
     |> add_proxy_flags(ssh_config)
     |> add_config_flag(ssh_config)
     |> add_connect_timeout_flag(ssh_config)
-    |> Kernel.++(["#{ssh_config.user}@#{hostname}"])
   end
 
   defp add_identity_flags(args, %{keys: keys}) when is_list(keys) do

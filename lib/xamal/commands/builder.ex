@@ -35,6 +35,51 @@ defmodule Xamal.Commands.Builder do
   end
 
   @doc """
+  Build the release on `builder.remote` (source already synced there —
+  see `Xamal.BuildTasks`) and create its tarball, in one combined command.
+
+  Mirrors `build_release/1` plus the `mix local.hex`/`local.rebar`/
+  `tailwind.install`/`esbuild.install` `--if-missing` bootstrap steps
+  `build_in_docker/1` uses, since a persistent build host — like a fresh
+  container — isn't guaranteed to already have them.
+  """
+  def build_release_remote(config) do
+    release_name = config.release.name
+    mix_env = config.release.mix_env
+    dir = Configuration.build_directory(config)
+
+    combine([
+      ["cd", dir],
+      ["mix", "local.hex", "--if-missing", "--force"],
+      ["mix", "local.rebar", "--if-missing", "--force"],
+      ["MIX_ENV=#{mix_env}", "mix", "deps.get", "--only", mix_env],
+      ["mix", "tailwind.install", "--if-missing"],
+      ["mix", "esbuild.install", "--if-missing"],
+      ["MIX_ENV=#{mix_env}", "mix", "assets.deploy"],
+      ["MIX_ENV=#{mix_env}", "mix", "release", release_name, "--overwrite"]
+    ])
+  end
+
+  @doc """
+  Create the tarball from a release already built on `builder.remote`.
+  """
+  def create_tarball_remote(config) do
+    release_name = config.release.name
+    mix_env = config.release.mix_env
+    dir = Configuration.build_directory(config)
+    release_dir = "#{dir}/_build/#{mix_env}/rel/#{release_name}"
+
+    ["tar", "-czf", remote_tarball_path(config), "-C", release_dir, "."]
+  end
+
+  @doc """
+  The tarball path on the `builder.remote` build host.
+  """
+  def remote_tarball_path(config) do
+    "#{Configuration.build_directory(config)}/#{tarball_name(config)}"
+  end
+
+  @doc """
   Upload the tarball to a remote host and unpack it.
   """
   def deploy_to_host(config) do

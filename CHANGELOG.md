@@ -46,6 +46,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   harder problem than running a command or streaming output). Incompatible
   with `ssh.key_data`, which has no system-ssh equivalent and is rejected
   together with `system_ssh` at config-load time. See `mix xamal.docs ssh`.
+- `builder: [remote: "user@host"]` is now actually implemented — previously
+  parsed and shown in `mix xamal.build.details`, but `mix xamal.build`
+  silently built locally regardless of this setting. Source syncs to
+  `~/.xamal/builds/<service>` on the build host via
+  `git archive HEAD | ssh ... tar -x` (only committed files — matches what
+  the deploy dirty-check already requires); `mix release` and the tarball
+  step run there (needs Elixir/Erlang/Mix already installed, same as Docker
+  mode needs Docker installed); the tarball is fetched back to the same
+  local path a local/Docker build produces, so `mix xamal.build.upload`
+  needs no changes. See `mix xamal.docs builder`.
 
 ### Changed
 

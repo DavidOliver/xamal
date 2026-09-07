@@ -105,6 +105,7 @@ defmodule Xamal.ConfigurationTest do
       assert Configuration.service_directory(config) == "/opt/xamal/my-app"
       assert Configuration.releases_directory(config) == "/opt/xamal/my-app/releases"
       assert Configuration.current_link(config) == "/opt/xamal/my-app/current"
+      assert Configuration.build_directory(config) == "~/.xamal/builds/my-app"
     end
   end
 

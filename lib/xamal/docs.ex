@@ -368,8 +368,33 @@ defmodule Xamal.Docs do
         remote: build@build-server
 
     The default local builder runs `mix release` on your dev machine.
-    Use Docker mode when your dev OS differs from the server OS.
-    Remote mode builds on a dedicated build server via SSH.
+    Docker mode doesn't help when your dev OS differs from the *target*
+    server OS (there's no such thing as a FreeBSD or macOS Docker
+    container) — remote mode does, by building on a real host of that OS
+    instead: your deploy target itself, or a dedicated build server.
+
+    Source is synced with `git archive HEAD | ssh ... tar -x` into
+    `~/.xamal/builds/<service>` on the build host — only committed files,
+    exactly what `mix xamal.deploy`'s dirty-check already requires to
+    match. (`--skip-dirty-check` with actual uncommitted changes means the
+    remote build silently builds the last commit, not your working tree —
+    unlike local/Docker mode, which builds whatever's on disk regardless.)
+    `mix release` and the tarball step run there — needs Elixir, Erlang,
+    and Mix already installed on that host, provisioned however you
+    provision the rest of it (xamal doesn't install a toolchain for you,
+    the same way Docker mode doesn't install Docker for you). The tarball
+    is then fetched back to the same local path a local/Docker build
+    would have produced (`scp` required locally), so `mix xamal.deploy`
+    and `mix xamal.build.upload` need no awareness of where the build
+    actually happened — including when the build host and a deploy host
+    are the same machine, which pays for a redundant download-then-reupload
+    in exchange for one consistent contract across all three builder modes.
+
+    `remote: user@host` picks that host's SSH user; `remote: host` (no
+    `user@`) reuses `ssh.user`. Everything else about how xamal connects —
+    `ssh.system_ssh`, `keys`, `proxy`, etc — carries over from your `ssh:`
+    config, since it's the same destination's connection settings, just a
+    different host and (optionally) user.
     """)
   end
 
