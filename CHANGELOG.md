@@ -87,6 +87,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   having done nothing, or half of something. New `SSH.execute_command!/3`,
   `Remote.ssh_exec!/3`, and `Remote.on_hosts!/2` raise immediately with the
   host, the command, and the underlying failure reason instead.
+- `Caddy.reload`/`Caddy.start`/`Caddy.stop` now work on FreeBSD when Caddy is
+  actually running. The `www/caddy` port's rc.d script defaults Caddy's admin
+  API to a unix socket (`unix//var/run/caddy/caddy.sock`) and exports it as
+  `CADDY_ADMIN` for every caddy subcommand it runs — but only when invoked
+  *through* the rc.d script (`service caddy ...`). Calling the `caddy`
+  binary directly, as these three do, doesn't inherit that, so they fell
+  back to caddy's own default admin address (`localhost:2019`) — which
+  nothing is listening on, since the real admin API is that socket. They
+  now set the same `CADDY_ADMIN` themselves on FreeBSD.
 
 ## [0.4.2]
 

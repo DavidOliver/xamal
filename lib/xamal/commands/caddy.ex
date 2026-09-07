@@ -10,6 +10,15 @@ defmodule Xamal.Commands.Caddy do
 
   @freebsd_caddyfile "/usr/local/etc/caddy/Caddyfile"
   @freebsd_logfile "/var/log/caddy/caddy.log"
+  # The FreeBSD www/caddy port's rc.d script defaults caddy_admin to this
+  # unix socket and exports it as CADDY_ADMIN for every caddy subcommand it
+  # runs — but only when invoked *through* the rc.d script (`service caddy
+  # ...`). Calling the caddy binary directly, as reload/start do, doesn't
+  # inherit that, so `caddy reload`/`caddy start` fall back to caddy's own
+  # default admin address (localhost:2019) — which nothing is listening on,
+  # since the running instance's admin API is actually this socket. Setting
+  # the same env var ourselves is what lets a bare `caddy reload` find it.
+  @freebsd_admin_socket "unix//var/run/caddy/caddy.sock"
   @import_line "import /opt/xamal/*/Caddyfile"
 
   @doc """
@@ -124,7 +133,13 @@ defmodule Xamal.Commands.Caddy do
   running config on every deploy.
   """
   def reload(config) do
-    [config.ssh.become, "caddy", "reload", "--config", system_caddyfile_path(config)]
+    cmd = ["caddy", "reload", "--config", system_caddyfile_path(config)]
+
+    if Configuration.freebsd?(config) do
+      [config.ssh.become | shell(admin_env(config) ++ cmd)]
+    else
+      [config.ssh.become | cmd]
+    end
   end
 
   @doc """
@@ -132,14 +147,34 @@ defmodule Xamal.Commands.Caddy do
   per-service one).
   """
   def start(config) do
-    ["caddy", "start", "--config", system_caddyfile_path(config)]
+    cmd = ["caddy", "start", "--config", system_caddyfile_path(config)]
+
+    if Configuration.freebsd?(config) do
+      shell(admin_env(config) ++ cmd)
+    else
+      cmd
+    end
   end
 
   @doc """
   Stop Caddy.
   """
-  def stop do
-    ["caddy", "stop"]
+  def stop(config) do
+    cmd = ["caddy", "stop"]
+
+    if Configuration.freebsd?(config) do
+      shell(admin_env(config) ++ cmd)
+    else
+      cmd
+    end
+  end
+
+  defp admin_env(config) do
+    if Configuration.freebsd?(config) do
+      ["CADDY_ADMIN=#{@freebsd_admin_socket}"]
+    else
+      []
+    end
   end
 
   @doc """
