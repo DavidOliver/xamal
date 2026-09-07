@@ -81,7 +81,7 @@ defmodule Xamal.AppTasks do
 
     Enum.each(hosts, fn host ->
       cmd = Caddy.write_maintenance_caddyfile(config)
-      SSH.execute_command(host, cmd, ssh_config: config.ssh)
+      SSH.execute_command!(host, cmd, ssh_config: config.ssh)
       reload_caddy!(host, config)
       say("  Maintenance mode enabled on #{host_label(config, host)}", :green)
     end)
@@ -194,7 +194,7 @@ defmodule Xamal.AppTasks do
       active_port = read_active_port(host, config) || config.caddy.app_port
 
       cmd = Caddy.write_caddyfile(config, active_port)
-      SSH.execute_command(host, cmd, ssh_config: config.ssh)
+      SSH.execute_command!(host, cmd, ssh_config: config.ssh)
       reload_caddy!(host, config)
       say("  Live mode restored on #{host_label(config, host)} (port #{active_port})", :green)
     end)
@@ -300,7 +300,7 @@ defmodule Xamal.AppTasks do
     env = role |> Configuration.Role.resolved_env(config.env) |> Configuration.Env.to_map()
     env_path = Configuration.Role.secrets_path(role, config)
 
-    ssh_exec(host, CommandBase.make_directory(Path.dirname(env_path)), config)
+    ssh_exec!(host, CommandBase.make_directory(Path.dirname(env_path)), config)
 
     # systemd reads the .env file; app.exec sources the .sh file.
     write_secret_file(host, config, env_path, EnvFile.encode(env))
@@ -312,7 +312,7 @@ defmodule Xamal.AppTasks do
       EnvFile.encode_shell(env)
     )
 
-    ssh_exec(host, Service.write_env_symlink(config, role), config)
+    ssh_exec!(host, Service.write_env_symlink(config, role), config)
   end
 
   # 0600: the files hold secrets, and systemd reads them as root.

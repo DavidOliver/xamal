@@ -49,7 +49,7 @@ defmodule Xamal.ServerTasks do
         {:error, _} ->
           say("  Installing Caddy on #{host_label(config, host)}...", :magenta)
           install_cmd = Caddy.install(config)
-          SSH.execute_command(host, install_cmd, ssh_config: config.ssh, timeout: 120_000)
+          SSH.execute_command!(host, install_cmd, ssh_config: config.ssh, timeout: 120_000)
       end
 
       # Other apps may already live on this host; refuse before touching
@@ -58,7 +58,7 @@ defmodule Xamal.ServerTasks do
 
       # Create directory structure
       bootstrap_cmd = Server.bootstrap(config)
-      SSH.execute_command(host, bootstrap_cmd, ssh_config: config.ssh)
+      SSH.execute_command!(host, bootstrap_cmd, ssh_config: config.ssh)
 
       # Install the service unit (systemd unit or rc.d scripts, depending on os)
       say(
@@ -66,7 +66,7 @@ defmodule Xamal.ServerTasks do
         :magenta
       )
 
-      SSH.execute_command(host, Service.install_unit(config), ssh_config: config.ssh)
+      SSH.execute_command!(host, Service.install_unit(config), ssh_config: config.ssh)
 
       # Generate the Caddyfile against whichever port is serving right now.
       #
@@ -79,13 +79,13 @@ defmodule Xamal.ServerTasks do
       # sitting on alt_port.
       upstream_port = caddy_upstream_port(read_active_port(host, config), config)
       caddyfile_cmd = Caddy.write_caddyfile(config, upstream_port)
-      SSH.execute_command(host, caddyfile_cmd, ssh_config: config.ssh)
+      SSH.execute_command!(host, caddyfile_cmd, ssh_config: config.ssh)
 
       # Make sure the system Caddyfile imports every service Caddyfile
       # (appends the import line only if missing; nothing else is touched).
-      SSH.execute_command(host, Caddy.configure_system_caddyfile(config), ssh_config: config.ssh)
+      SSH.execute_command!(host, Caddy.configure_system_caddyfile(config), ssh_config: config.ssh)
 
-      SSH.execute_command(host, Caddy.enable(config), ssh_config: config.ssh)
+      SSH.execute_command!(host, Caddy.enable(config), ssh_config: config.ssh)
       reload_caddy!(host, config)
 
       say("  Bootstrapped #{host_label(config, host)}", :green)
