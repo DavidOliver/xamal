@@ -251,6 +251,25 @@ defmodule Xamal.Docs do
     but you're responsible for adding `import /opt/xamal/*/Caddyfile` to
     your own Caddyfile yourself.
 
+    ## admin
+
+      caddy:
+        admin: "localhost:2020"          # or e.g. "unix//run/caddy/admin.sock"
+
+    `mix xamal.app.maintenance`/`app.live`/`server.bootstrap` all call the
+    `caddy` binary directly (`caddy reload`, occasionally `start`/`stop`),
+    which needs to know the *running* instance's admin API address — it's a
+    separate process, with no way to discover that on its own beyond being
+    told. Unset, xamal guesses: Caddy's own default (`localhost:2019`) on
+    Linux, or FreeBSD's `www/caddy` package default
+    (`unix//var/run/caddy/caddy.sock`, which its rc.d script sets via
+    `CADDY_ADMIN` for anything invoked *through* `service caddy ...` — but
+    not for xamal's direct `caddy reload`) on FreeBSD. Both guesses are only
+    right as long as nothing's changed the real admin address — a
+    customized `caddy_admin` in `rc.conf`, a hand-written `admin` block in a
+    Caddyfile outside xamal's control. Set this explicitly if either guess
+    is wrong for your setup.
+
     ## extra_config
 
       caddy:

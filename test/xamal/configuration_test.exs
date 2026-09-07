@@ -217,6 +217,14 @@ defmodule Xamal.ConfigurationTest do
       refute Caddy.manage_system_caddyfile?(caddy)
     end
 
+    test "admin defaults to nil" do
+      assert Caddy.new(%{}).admin == nil
+    end
+
+    test "parses an explicit admin override" do
+      assert Caddy.new(%{"admin" => "localhost:2020"}).admin == "localhost:2020"
+    end
+
     test "generate_caddyfile with host" do
       caddy = Caddy.new(%{"host" => "app.example.com"})
       caddyfile = Caddy.generate_caddyfile(caddy, 4000)

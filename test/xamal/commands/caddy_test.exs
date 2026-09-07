@@ -221,6 +221,22 @@ defmodule Xamal.Commands.CaddyTest do
       assert hd(cmd) == "doas"
       refute Enum.join(cmd, " ") =~ "sudo"
     end
+
+    test "an explicit caddy.admin overrides the freebsd default" do
+      config = %{@freebsd_config | caddy: %{@freebsd_config.caddy | admin: "localhost:2020"}}
+      cmd_str = config |> Caddy.reload() |> Enum.join(" ")
+
+      assert cmd_str =~ "CADDY_ADMIN=localhost:2020"
+      refute cmd_str =~ "caddy.sock"
+    end
+
+    test "an explicit caddy.admin also applies on linux" do
+      config = %{@config | caddy: %{@config.caddy | admin: "localhost:2020"}}
+      cmd_str = config |> Caddy.reload() |> Enum.join(" ")
+
+      assert cmd_str =~ "sh -c"
+      assert cmd_str =~ "CADDY_ADMIN=localhost:2020"
+    end
   end
 
   describe "start/1" do
@@ -250,6 +266,26 @@ defmodule Xamal.Commands.CaddyTest do
 
       assert cmd_str =~ "CADDY_ADMIN=unix//var/run/caddy/caddy.sock"
       assert cmd_str =~ "caddy stop"
+    end
+  end
+
+  describe "admin_env/1" do
+    test "empty on linux when caddy.admin is unset" do
+      assert Caddy.admin_env(@config) == []
+    end
+
+    test "the freebsd package default when caddy.admin is unset" do
+      assert Caddy.admin_env(@freebsd_config) == ["CADDY_ADMIN=unix//var/run/caddy/caddy.sock"]
+    end
+
+    test "caddy.admin overrides the freebsd default" do
+      config = %{@freebsd_config | caddy: %{@freebsd_config.caddy | admin: "localhost:2020"}}
+      assert Caddy.admin_env(config) == ["CADDY_ADMIN=localhost:2020"]
+    end
+
+    test "caddy.admin also applies on linux, where nothing is set by default" do
+      config = %{@config | caddy: %{@config.caddy | admin: "localhost:2020"}}
+      assert Caddy.admin_env(config) == ["CADDY_ADMIN=localhost:2020"]
     end
   end
 

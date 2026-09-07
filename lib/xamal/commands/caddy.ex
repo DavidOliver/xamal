@@ -135,10 +135,9 @@ defmodule Xamal.Commands.Caddy do
   def reload(config) do
     cmd = ["caddy", "reload", "--config", system_caddyfile_path(config)]
 
-    if Configuration.freebsd?(config) do
-      [config.ssh.become | shell(admin_env(config) ++ cmd)]
-    else
-      [config.ssh.become | cmd]
+    case admin_env(config) do
+      [] -> [config.ssh.become | cmd]
+      env -> [config.ssh.become | shell(env ++ cmd)]
     end
   end
 
@@ -149,10 +148,9 @@ defmodule Xamal.Commands.Caddy do
   def start(config) do
     cmd = ["caddy", "start", "--config", system_caddyfile_path(config)]
 
-    if Configuration.freebsd?(config) do
-      shell(admin_env(config) ++ cmd)
-    else
-      cmd
+    case admin_env(config) do
+      [] -> cmd
+      env -> shell(env ++ cmd)
     end
   end
 
@@ -162,18 +160,26 @@ defmodule Xamal.Commands.Caddy do
   def stop(config) do
     cmd = ["caddy", "stop"]
 
-    if Configuration.freebsd?(config) do
-      shell(admin_env(config) ++ cmd)
-    else
-      cmd
+    case admin_env(config) do
+      [] -> cmd
+      env -> shell(env ++ cmd)
     end
   end
 
-  defp admin_env(config) do
-    if Configuration.freebsd?(config) do
-      ["CADDY_ADMIN=#{@freebsd_admin_socket}"]
-    else
-      []
+  @doc """
+  The `CADDY_ADMIN=...` env var assignment (as a one-element list, or `[]`
+  when nothing needs overriding) `reload/1`/`start/1`/`stop/1` prefix onto a
+  direct `caddy` invocation — `caddy.admin` if set, else FreeBSD's
+  `www/caddy` package default on FreeBSD, else nothing (Caddy's own default
+  already matches on Linux).
+  """
+  def admin_env(config) do
+    case config.caddy.admin do
+      nil ->
+        if Configuration.freebsd?(config), do: ["CADDY_ADMIN=#{@freebsd_admin_socket}"], else: []
+
+      admin ->
+        ["CADDY_ADMIN=#{admin}"]
     end
   end
 

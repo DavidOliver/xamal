@@ -56,6 +56,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   mode needs Docker installed); the tarball is fetched back to the same
   local path a local/Docker build produces, so `mix xamal.build.upload`
   needs no changes. See `mix xamal.docs builder`.
+- `caddy: [admin: "localhost:2020"]` — overrides the admin API address
+  `reload`/`start`/`stop` assume when calling `caddy` directly (see the
+  `CADDY_ADMIN` fix below). Unset, xamal guesses Caddy's own default on
+  Linux or FreeBSD's `www/caddy` package default on FreeBSD — both wrong if
+  something's changed the real admin address (a customized `caddy_admin` in
+  `rc.conf`, a hand-written `admin` block in a Caddyfile outside xamal's
+  control). See `mix xamal.docs caddy`.
 
 ### Changed
 
