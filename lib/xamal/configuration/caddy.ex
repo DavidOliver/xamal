@@ -1,13 +1,18 @@
 defmodule Xamal.Configuration.Caddy do
   @moduledoc """
   Caddy reverse proxy configuration.
+
+  `extra_config` is raw Caddyfile text spliced into the generated site block
+  alongside `reverse_proxy` — the escape hatch for anything xamal doesn't
+  model directly (request blocking by header/path, custom matchers, etc.).
   """
 
   defstruct [
     :host,
     :hosts,
     :app_port,
-    :ssl
+    :ssl,
+    :extra_config
   ]
 
   def new(config) when is_map(config) do
@@ -15,7 +20,8 @@ defmodule Xamal.Configuration.Caddy do
       host: Map.get(config, "host"),
       hosts: Map.get(config, "hosts", []),
       app_port: Map.get(config, "app_port", 4000),
-      ssl: Map.get(config, "ssl", true)
+      ssl: Map.get(config, "ssl", true),
+      extra_config: Map.get(config, "extra_config")
     }
   end
 
@@ -36,9 +42,15 @@ defmodule Xamal.Configuration.Caddy do
 
   @doc """
   Generate a Caddyfile for the given upstream port.
+
+  `extra_config`, if set, is spliced in verbatim alongside `reverse_proxy` —
+  e.g. matchers and `respond`/`abort` directives to block by header or path.
+  Caddy orders recognized directives by its own fixed priority regardless of
+  where they appear in the block, so exact placement here is cosmetic; wrap
+  in an explicit `route { }` in `extra_config` if strict textual order matters.
   """
   def generate_caddyfile(%__MODULE__{} = caddy, upstream_port) do
-    caddyfile_block(caddy, "reverse_proxy localhost:#{upstream_port}")
+    caddyfile_block(caddy, site_directives(caddy, upstream_port))
   end
 
   @doc """
@@ -46,6 +58,14 @@ defmodule Xamal.Configuration.Caddy do
   """
   def maintenance_caddyfile(%__MODULE__{} = caddy) do
     caddyfile_block(caddy, ~s(respond "Service under maintenance" 503))
+  end
+
+  defp site_directives(%__MODULE__{extra_config: extra}, upstream_port) when is_binary(extra) do
+    "#{String.trim(extra)}\n    reverse_proxy localhost:#{upstream_port}"
+  end
+
+  defp site_directives(%__MODULE__{}, upstream_port) do
+    "reverse_proxy localhost:#{upstream_port}"
   end
 
   defp http_hostnames(hosts) do

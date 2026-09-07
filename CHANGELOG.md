@@ -25,6 +25,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   through a configurable privilege-escalation command instead of a hardcoded
   `sudo`, for hosts (common on FreeBSD) that only have `doas` installed. See
   `mix xamal.docs ssh`.
+- `caddy: [extra_config:]` — raw Caddyfile text spliced into the generated
+  site block alongside `reverse_proxy`, an escape hatch for anything xamal
+  doesn't model directly (blocking by header/path, custom matchers, etc.).
+  See `mix xamal.docs caddy`.
 
 ## [0.4.2]
 

@@ -115,6 +115,23 @@ defmodule Xamal.Commands.CaddyTest do
       assert cmd_str =~ "app.example.com"
       assert cmd_str =~ "Caddyfile"
     end
+
+    test "splices in extra_config alongside reverse_proxy" do
+      config = %{
+        @config
+        | caddy: %{
+            @config.caddy
+            | extra_config: ~s(@blocked header User-Agent "*BadBot*"\nrespond @blocked 403)
+          }
+      }
+
+      cmd = Caddy.write_caddyfile(config, 4000)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "@blocked"
+      assert cmd_str =~ "respond @blocked 403"
+      assert cmd_str =~ "reverse_proxy localhost:4000"
+    end
   end
 
   describe "reload/1" do

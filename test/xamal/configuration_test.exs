@@ -226,6 +226,38 @@ defmodule Xamal.ConfigurationTest do
       assert caddyfile =~ "503"
       assert caddyfile =~ "maintenance"
     end
+
+    test "parses extra_config" do
+      caddy =
+        Caddy.new(%{
+          "host" => "app.example.com",
+          "extra_config" => "respond @blocked 403"
+        })
+
+      assert caddy.extra_config == "respond @blocked 403"
+    end
+
+    test "generate_caddyfile splices extra_config in alongside reverse_proxy" do
+      caddy =
+        Caddy.new(%{
+          "host" => "app.example.com",
+          "extra_config" => "@blocked path /admin/*\nrespond @blocked 404"
+        })
+
+      caddyfile = Caddy.generate_caddyfile(caddy, 4000)
+
+      assert caddyfile =~ "@blocked path /admin/*"
+      assert caddyfile =~ "respond @blocked 404"
+      assert caddyfile =~ "reverse_proxy localhost:4000"
+    end
+
+    test "generate_caddyfile without extra_config is unchanged" do
+      caddy = Caddy.new(%{"host" => "app.example.com"})
+      caddyfile = Caddy.generate_caddyfile(caddy, 4000)
+
+      assert caddyfile =~ "reverse_proxy localhost:4000"
+      refute caddyfile =~ "respond"
+    end
   end
 
   describe "Role" do

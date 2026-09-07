@@ -193,6 +193,26 @@ defmodule Xamal.Docs do
 
     The generated Caddyfile lives at /opt/xamal/<service>/Caddyfile.
 
+    ## extra_config
+
+      caddy:
+        extra_config: |
+          @blocked {
+              header User-Agent "*BadBot*"
+          }
+          respond @blocked 403
+
+          @admin path /admin/*
+          respond @admin 404
+
+    Raw Caddyfile text spliced into the generated site block alongside
+    reverse_proxy — the escape hatch for anything not modeled directly here
+    (request blocking by header/path, custom matchers, rate limiting, etc).
+    Caddy orders recognized directives by its own fixed priority regardless
+    of where they appear in the block, so placement relative to reverse_proxy
+    doesn't matter for common directives like respond; wrap in an explicit
+    `route { }` if you need strict textual ordering.
+
     ## Maintenance mode
 
       mix xamal.app.maintenance    # Serve 503 responses
