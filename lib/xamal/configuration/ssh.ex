@@ -1,11 +1,17 @@
 defmodule Xamal.Configuration.Ssh do
   @moduledoc """
   SSH connection configuration.
+
+  `become` is the privilege-escalation command xamal prefixes onto every
+  remote command that needs root (installing units/services, writing to
+  `/opt`, reloading Caddy, etc.) — `"sudo"` by default, override to `"doas"`
+  on hosts that use OpenBSD's `doas` instead (common on FreeBSD).
   """
 
   # key_data is a private key; keep it out of inspect output.
   @derive {Inspect, except: [:key_data]}
   defstruct user: "root",
+            become: "sudo",
             port: 22,
             proxy: nil,
             proxy_command: nil,
@@ -22,6 +28,7 @@ defmodule Xamal.Configuration.Ssh do
   def new(config) when is_map(config) do
     %__MODULE__{
       user: Map.get(config, "user", "root"),
+      become: Map.get(config, "become", "sudo"),
       port: Map.get(config, "port", 22),
       proxy: Map.get(config, "proxy"),
       proxy_command: Map.get(config, "proxy_command"),

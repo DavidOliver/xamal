@@ -168,6 +168,7 @@ defmodule Xamal.Docs do
 
       ssh:
         user: deploy          # SSH user (default: root)
+        become: doas          # Privilege escalation command (default: sudo)
         port: 22              # SSH port (default: 22)
         keys: ["~/.ssh/deploy_key"]  # Private key file (first one that exists)
         key_data: "..."       # Or the private key itself, e.g. from a secret store
@@ -196,6 +197,13 @@ defmodule Xamal.Docs do
 
     keys_only is accepted for Kamal compatibility; Xamal always uses only the
     configured key.
+
+    ## become
+
+    Prefixed onto every remote command that needs root (installing service
+    units, writing to /opt, reloading Caddy, etc). Defaults to "sudo"; set to
+    "doas" on hosts that use OpenBSD's doas instead — common on FreeBSD boxes
+    that don't install sudo at all. Can include arguments, e.g. "doas -u root".
     """)
   end
 

@@ -133,28 +133,28 @@ defmodule Xamal.Commands.RcD do
   boot — the same relationship `systemctl start`/`enable` have.
   """
   def start(config, port) do
-    ["sudo", "service", instance_name(config, port), "onestart"]
+    [config.ssh.become, "service", instance_name(config, port), "onestart"]
   end
 
   @doc """
   Stop a service instance on the given port.
   """
   def stop(config, port) do
-    ["sudo", "service", instance_name(config, port), "onestop"]
+    [config.ssh.become, "service", instance_name(config, port), "onestop"]
   end
 
   @doc """
   Enable a service instance for boot-time startup.
   """
   def enable(config, port) do
-    ["sudo", "sysrc", "#{instance_name(config, port)}_enable=YES"]
+    [config.ssh.become, "sysrc", "#{instance_name(config, port)}_enable=YES"]
   end
 
   @doc """
   Disable a service instance from boot-time startup.
   """
   def disable(config, port) do
-    ["sudo", "sysrc", "#{instance_name(config, port)}_enable=NO"]
+    [config.ssh.become, "sysrc", "#{instance_name(config, port)}_enable=NO"]
   end
 
   @doc """
@@ -171,7 +171,7 @@ defmodule Xamal.Commands.RcD do
   Remove both port-instance scripts.
   """
   def remove_unit(config) do
-    combine(Enum.map(ports(config), &["sudo", "rm", "-f", script_path(config, &1)]))
+    combine(Enum.map(ports(config), &[config.ssh.become, "rm", "-f", script_path(config, &1)]))
   end
 
   @doc """
@@ -182,14 +182,17 @@ defmodule Xamal.Commands.RcD do
   instance keeps running and the next start or stop uses the new script.
   """
   def sync_unit(config) do
+    become = config.ssh.become
+
     scripts =
       Enum.map_join(ports(config), " ", fn port ->
         path = script_path(config, port)
         staged = "#{path}.xamal-new"
 
-        "echo '#{escaped_script(config, port)}' | sudo tee #{staged} >/dev/null &&" <>
-          " if cmp -s #{staged} #{path}; then sudo rm -f #{staged};" <>
-          " else sudo chmod 0555 #{staged} && sudo mv #{staged} #{path} && updated=1; fi &&"
+        "echo '#{escaped_script(config, port)}' | #{become} tee #{staged} >/dev/null &&" <>
+          " if cmp -s #{staged} #{path}; then #{become} rm -f #{staged};" <>
+          " else #{become} chmod 0555 #{staged} && #{become} mv #{staged} #{path} &&" <>
+          " updated=1; fi &&"
       end)
 
     shell(["updated=0;", scripts, "if [ $updated = 1 ]; then echo unit-updated; fi"])
@@ -252,6 +255,7 @@ defmodule Xamal.Commands.RcD do
   """
   def rename_cleanup(config, found) do
     ports = ports(config)
+    become = config.ssh.become
 
     old_names =
       found
@@ -268,9 +272,9 @@ defmodule Xamal.Commands.RcD do
           name = "#{old}_#{port}"
 
           [
-            "sudo service #{name} onestop",
-            "sudo sysrc -x #{name}_enable",
-            "sudo rm #{@rc_dir}/#{name}"
+            "#{become} service #{name} onestop",
+            "#{become} sysrc -x #{name}_enable",
+            "#{become} rm #{@rc_dir}/#{name}"
           ]
         end)
       end)
@@ -280,13 +284,14 @@ defmodule Xamal.Commands.RcD do
 
   defp write_script(config, port) do
     path = script_path(config, port)
+    become = config.ssh.become
 
     combine([
       pipe([
         ["echo", "'#{escaped_script(config, port)}'"],
-        ["sudo", "tee", path]
+        [become, "tee", path]
       ]),
-      ["sudo", "chmod", "0555", path]
+      [become, "chmod", "0555", path]
     ])
   end
 

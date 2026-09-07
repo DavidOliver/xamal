@@ -18,19 +18,21 @@ defmodule Xamal.Commands.Caddy do
   """
   def install(config) do
     if Configuration.freebsd?(config) do
-      ["sudo", "pkg", "install", "-y", "caddy"]
+      [config.ssh.become, "pkg", "install", "-y", "caddy"]
     else
-      install_via_apt()
+      install_via_apt(config)
     end
   end
 
-  defp install_via_apt do
+  defp install_via_apt(config) do
+    become = config.ssh.become
+
     combine([
-      ["sudo", "apt-get", "install", "-y", "apt-transport-https", "curl"],
+      [become, "apt-get", "install", "-y", "apt-transport-https", "curl"],
       pipe([
         ["curl", "-1sLf", "'https://dl.cloudsmith.io/public/caddy/stable/gpg.key'"],
         [
-          "sudo",
+          become,
           "gpg",
           "--batch",
           "--yes",
@@ -41,15 +43,15 @@ defmodule Xamal.Commands.Caddy do
       ]),
       pipe([
         ["curl", "-1sLf", "'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt'"],
-        ["sudo", "tee", "/etc/apt/sources.list.d/caddy-stable.list"]
+        [become, "tee", "/etc/apt/sources.list.d/caddy-stable.list"]
       ]),
-      ["sudo", "apt-get", "update"],
-      ["sudo", "apt-get", "install", "-y", "caddy"],
+      [become, "apt-get", "update"],
+      [become, "apt-get", "install", "-y", "caddy"],
       # The package ships a :80 welcome site. Caddy was just installed, so
       # nothing else is in the file yet; replace it with the import line.
       pipe([
         ["echo", "'#{@import_line}'"],
-        ["sudo", "tee", @system_caddyfile]
+        [become, "tee", @system_caddyfile]
       ])
     ])
   end
@@ -108,7 +110,7 @@ defmodule Xamal.Commands.Caddy do
   isn't glued onto it.
   """
   def configure_system_caddyfile(config) do
-    ["sudo" | shell([import_ensure_script(system_caddyfile_path(config))])]
+    [config.ssh.become | shell([import_ensure_script(system_caddyfile_path(config))])]
   end
 
   @doc false
@@ -126,13 +128,15 @@ defmodule Xamal.Commands.Caddy do
   to the running instance.
   """
   def enable(config) do
+    become = config.ssh.become
+
     if Configuration.freebsd?(config) do
       combine([
-        ["sudo", "sysrc", "caddy_enable=YES"],
-        any([["service", "caddy", "status"], ["sudo", "service", "caddy", "start"]])
+        [become, "sysrc", "caddy_enable=YES"],
+        any([["service", "caddy", "status"], [become, "service", "caddy", "start"]])
       ])
     else
-      ["sudo", "systemctl", "enable", "--now", "caddy"]
+      [become, "systemctl", "enable", "--now", "caddy"]
     end
   end
 
@@ -147,7 +151,7 @@ defmodule Xamal.Commands.Caddy do
   running config untouched if it is invalid.
   """
   def reload(config) do
-    ["sudo", "caddy", "reload", "--config", system_caddyfile_path(config)]
+    [config.ssh.become, "caddy", "reload", "--config", system_caddyfile_path(config)]
   end
 
   @doc """

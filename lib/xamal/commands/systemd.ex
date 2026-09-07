@@ -53,13 +53,14 @@ defmodule Xamal.Commands.Systemd do
     content = generate_unit_content(config)
     escaped = String.replace(content, "'", "'\\''")
     path = unit_path(config)
+    become = config.ssh.become
 
     combine([
       pipe([
         ["echo", "'#{escaped}'"],
-        ["sudo", "tee", path]
+        [become, "tee", path]
       ]),
-      ["sudo", "systemctl", "daemon-reload"]
+      [become, "systemctl", "daemon-reload"]
     ])
   end
 
@@ -76,11 +77,13 @@ defmodule Xamal.Commands.Systemd do
     escaped = String.replace(content, "'", "'\\''")
     path = unit_path(config)
     staged = "#{path}.xamal-new"
+    become = config.ssh.become
 
     shell([
-      "echo '#{escaped}' | sudo tee #{staged} >/dev/null &&",
-      "if cmp -s #{staged} #{path}; then sudo rm -f #{staged};",
-      "else sudo mv #{staged} #{path} && sudo systemctl daemon-reload && echo unit-updated; fi"
+      "echo '#{escaped}' | #{become} tee #{staged} >/dev/null &&",
+      "if cmp -s #{staged} #{path}; then #{become} rm -f #{staged};",
+      "else #{become} mv #{staged} #{path} && #{become} systemctl daemon-reload &&",
+      "echo unit-updated; fi"
     ])
   end
 
@@ -102,28 +105,28 @@ defmodule Xamal.Commands.Systemd do
   Start a service instance on the given port.
   """
   def start(config, port) do
-    ["sudo", "systemctl", "start", unit_instance(config, port)]
+    [config.ssh.become, "systemctl", "start", unit_instance(config, port)]
   end
 
   @doc """
   Stop a service instance on the given port.
   """
   def stop(config, port) do
-    ["sudo", "systemctl", "stop", unit_instance(config, port)]
+    [config.ssh.become, "systemctl", "stop", unit_instance(config, port)]
   end
 
   @doc """
   Enable a service instance for boot-time startup.
   """
   def enable(config, port) do
-    ["sudo", "systemctl", "enable", unit_instance(config, port)]
+    [config.ssh.become, "systemctl", "enable", unit_instance(config, port)]
   end
 
   @doc """
   Disable a service instance from boot-time startup.
   """
   def disable(config, port) do
-    ["sudo", "systemctl", "disable", unit_instance(config, port)]
+    [config.ssh.become, "systemctl", "disable", unit_instance(config, port)]
   end
 
   @doc """
@@ -140,9 +143,11 @@ defmodule Xamal.Commands.Systemd do
   Remove the unit file and reload systemd.
   """
   def remove_unit(config) do
+    become = config.ssh.become
+
     combine([
-      ["sudo", "rm", "-f", unit_path(config)],
-      ["sudo", "systemctl", "daemon-reload"]
+      [become, "rm", "-f", unit_path(config)],
+      [become, "systemctl", "daemon-reload"]
     ])
   end
 
@@ -205,14 +210,19 @@ defmodule Xamal.Commands.Systemd do
       |> Enum.map(&(&1 |> Path.basename() |> String.replace_suffix("@.service", "")))
 
     ports = [config.caddy.app_port, Caddy.alt_port(config.caddy)]
+    become = config.ssh.become
 
     commands =
       Enum.flat_map(old_names, fn old ->
         instances = Enum.map_join(ports, " ", &"#{old}@#{&1}")
-        ["sudo systemctl disable --now #{instances}", "sudo rm #{@unit_dir}/#{old}@.service"]
+
+        [
+          "#{become} systemctl disable --now #{instances}",
+          "#{become} rm #{@unit_dir}/#{old}@.service"
+        ]
       end)
 
-    {old_names, commands ++ ["sudo systemctl daemon-reload"]}
+    {old_names, commands ++ ["#{become} systemctl daemon-reload"]}
   end
 
   defp unit_path(config) do

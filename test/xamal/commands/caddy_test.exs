@@ -17,6 +17,11 @@ defmodule Xamal.Commands.CaddyTest do
 
   @freebsd_config %{@config | raw_config: Map.put(@config.raw_config, "os", "freebsd")}
 
+  @doas_freebsd_config %{
+    @freebsd_config
+    | ssh: %Xamal.Configuration.Ssh{become: "doas"}
+  }
+
   describe "install/1" do
     test "installs via apt on linux" do
       cmd = Caddy.install(@config)
@@ -29,6 +34,18 @@ defmodule Xamal.Commands.CaddyTest do
 
     test "installs via pkg on freebsd" do
       assert Caddy.install(@freebsd_config) == ["sudo", "pkg", "install", "-y", "caddy"]
+    end
+
+    test "uses ssh.become for privilege escalation on freebsd" do
+      assert Caddy.install(@doas_freebsd_config) == ["doas", "pkg", "install", "-y", "caddy"]
+    end
+
+    test "uses ssh.become for privilege escalation on linux" do
+      config = %{@config | ssh: %Xamal.Configuration.Ssh{become: "doas"}}
+      cmd_str = config |> Caddy.install() |> Enum.join(" ")
+
+      assert cmd_str =~ "doas apt-get"
+      refute cmd_str =~ "sudo"
     end
   end
 
@@ -92,6 +109,11 @@ defmodule Xamal.Commands.CaddyTest do
     test "uses the FreeBSD system Caddyfile on freebsd" do
       assert Caddy.reload(@freebsd_config) ==
                ["sudo", "caddy", "reload", "--config", "/usr/local/etc/caddy/Caddyfile"]
+    end
+
+    test "uses ssh.become for privilege escalation" do
+      assert Caddy.reload(@doas_freebsd_config) ==
+               ["doas", "caddy", "reload", "--config", "/usr/local/etc/caddy/Caddyfile"]
     end
   end
 
@@ -161,6 +183,10 @@ defmodule Xamal.Commands.CaddyTest do
       assert script =~ ">> /usr/local/etc/caddy/Caddyfile"
       refute script =~ " /etc/caddy/Caddyfile"
     end
+
+    test "uses ssh.become for privilege escalation" do
+      assert ["doas", "sh", "-c", _] = Caddy.configure_system_caddyfile(@doas_freebsd_config)
+    end
   end
 
   describe "enable/1" do
@@ -173,6 +199,13 @@ defmodule Xamal.Commands.CaddyTest do
 
       assert cmd_str =~ "sudo sysrc caddy_enable=YES"
       assert cmd_str =~ "service caddy status || sudo service caddy start"
+    end
+
+    test "uses ssh.become for privilege escalation" do
+      cmd_str = Enum.join(Caddy.enable(@doas_freebsd_config), " ")
+
+      assert cmd_str =~ "doas sysrc caddy_enable=YES"
+      refute cmd_str =~ "sudo"
     end
   end
 
