@@ -5,6 +5,15 @@ defmodule Xamal.Configuration.Caddy do
   `extra_config` is raw Caddyfile text spliced into the generated site block
   alongside `reverse_proxy` — the escape hatch for anything xamal doesn't
   model directly (request blocking by header/path, custom matchers, etc.).
+
+  `admin` overrides the admin API address `Xamal.Commands.Caddy`'s
+  `reload`/`start`/`stop` pass via `CADDY_ADMIN` when calling the `caddy`
+  binary directly. Unset, they use Caddy's own default (`localhost:2019`)
+  on Linux, or FreeBSD's `www/caddy` package default
+  (`unix//var/run/caddy/caddy.sock`) on FreeBSD — a guess at what's
+  actually running, right only as long as nothing (a customized
+  `caddy_admin` in `rc.conf`, a hand-written `admin` block in a Caddyfile
+  outside xamal's control) has changed it. Set this explicitly if it has.
   """
 
   defstruct [
@@ -12,7 +21,8 @@ defmodule Xamal.Configuration.Caddy do
     :hosts,
     :app_port,
     :ssl,
-    :extra_config
+    :extra_config,
+    :admin
   ]
 
   def new(config) when is_map(config) do
@@ -21,7 +31,8 @@ defmodule Xamal.Configuration.Caddy do
       hosts: Map.get(config, "hosts", []),
       app_port: Map.get(config, "app_port", 4000),
       ssl: Map.get(config, "ssl", true),
-      extra_config: Map.get(config, "extra_config")
+      extra_config: Map.get(config, "extra_config"),
+      admin: Map.get(config, "admin")
     }
   end
 
