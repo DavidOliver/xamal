@@ -96,16 +96,23 @@ defmodule Xamal.Commands.Caddy do
 
   @doc """
   Reload Caddy configuration (graceful - drains existing connections).
+
+  Reloads from the *system* Caddyfile, not the per-service one — Caddy's
+  `reload --config` replaces the entire live config with whatever that file
+  (and its imports) resolves to, so reloading from the per-service file
+  alone would drop every other site and any global options block from the
+  running config on every deploy.
   """
   def reload(config) do
-    [config.ssh.become, "caddy", "reload", "--config", caddyfile_path(config)]
+    [config.ssh.become, "caddy", "reload", "--config", system_caddyfile_path(config)]
   end
 
   @doc """
-  Start Caddy with the service Caddyfile.
+  Start Caddy with the system Caddyfile (see `reload/1` for why not the
+  per-service one).
   """
   def start(config) do
-    ["caddy", "start", "--config", caddyfile_path(config)]
+    ["caddy", "start", "--config", system_caddyfile_path(config)]
   end
 
   @doc """

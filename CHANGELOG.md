@@ -30,6 +30,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   doesn't model directly (blocking by header/path, custom matchers, etc.).
   See `mix xamal.docs caddy`.
 
+### Fixed
+
+- `Caddy.reload`/`Caddy.start` now target the system Caddyfile instead of
+  the per-service one. `caddy reload --config <file>` replaces the entire
+  live config with whatever `<file>` (and its imports) resolves to, so
+  reloading from the per-service file — which has no imports of its own —
+  was dropping every other site and any global options block from the
+  *running* config on every deploy, not just at bootstrap. This dates back
+  to xamal's initial commit.
+
 ## [0.4.2]
 
 ### Fixed

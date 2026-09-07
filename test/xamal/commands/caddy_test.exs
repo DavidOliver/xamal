@@ -135,17 +135,31 @@ defmodule Xamal.Commands.CaddyTest do
   end
 
   describe "reload/1" do
-    test "reloads caddy config" do
+    test "reloads from the system Caddyfile, not the per-service one" do
       cmd = Caddy.reload(@config)
 
-      assert cmd == ["sudo", "caddy", "reload", "--config", "/opt/xamal/my-app/Caddyfile"]
+      assert cmd == ["sudo", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"]
+    end
+
+    test "targets the freebsd system Caddyfile there" do
+      cmd = Caddy.reload(@freebsd_config)
+
+      assert cmd == ["sudo", "caddy", "reload", "--config", "/usr/local/etc/caddy/Caddyfile"]
     end
 
     test "uses ssh.become for privilege escalation" do
       config = %{@config | ssh: %Xamal.Configuration.Ssh{become: "doas"}}
       cmd = Caddy.reload(config)
 
-      assert cmd == ["doas", "caddy", "reload", "--config", "/opt/xamal/my-app/Caddyfile"]
+      assert cmd == ["doas", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"]
+    end
+  end
+
+  describe "start/1" do
+    test "starts from the system Caddyfile, not the per-service one" do
+      cmd = Caddy.start(@config)
+
+      assert cmd == ["caddy", "start", "--config", "/etc/caddy/Caddyfile"]
     end
   end
 
