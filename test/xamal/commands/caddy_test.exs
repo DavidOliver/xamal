@@ -123,14 +123,28 @@ defmodule Xamal.Commands.CaddyTest do
                ["sudo", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"]
     end
 
-    test "uses the FreeBSD system Caddyfile on freebsd" do
-      assert Caddy.reload(@freebsd_config) ==
-               ["sudo", "caddy", "reload", "--config", "/usr/local/etc/caddy/Caddyfile"]
+    test "uses ssh.become for privilege escalation" do
+      config = %{@config | ssh: %Xamal.Configuration.Ssh{become: "doas"}}
+
+      assert Caddy.reload(config) ==
+               ["doas", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"]
     end
 
-    test "uses ssh.become for privilege escalation" do
-      assert Caddy.reload(@doas_freebsd_config) ==
-               ["doas", "caddy", "reload", "--config", "/usr/local/etc/caddy/Caddyfile"]
+    test "on freebsd, targets the system Caddyfile and sets CADDY_ADMIN for the unix socket" do
+      cmd = Caddy.reload(@freebsd_config)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert hd(cmd) == "sudo"
+      assert cmd_str =~ "sh -c"
+      assert cmd_str =~ "CADDY_ADMIN=unix//var/run/caddy/caddy.sock"
+      assert cmd_str =~ "caddy reload --config /usr/local/etc/caddy/Caddyfile"
+    end
+
+    test "on freebsd, still uses ssh.become for privilege escalation" do
+      cmd = Caddy.reload(@doas_freebsd_config)
+
+      assert hd(cmd) == "doas"
+      refute Enum.join(cmd, " ") =~ "sudo"
     end
   end
 
@@ -232,6 +246,28 @@ defmodule Xamal.Commands.CaddyTest do
 
       assert cmd_str =~ "grep -lx ':80 {' /opt/xamal/*/Caddyfile"
       assert cmd_str =~ "grep -vxF /opt/xamal/my-app/Caddyfile"
+    end
+
+    test "on freebsd, sets CADDY_ADMIN for the unix socket" do
+      cmd = Caddy.start(@freebsd_config)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "CADDY_ADMIN=unix//var/run/caddy/caddy.sock"
+      assert cmd_str =~ "caddy start --config /usr/local/etc/caddy/Caddyfile"
+    end
+  end
+
+  describe "stop/1" do
+    test "stops caddy" do
+      assert Caddy.stop(@config) == ["caddy", "stop"]
+    end
+
+    test "on freebsd, sets CADDY_ADMIN for the unix socket" do
+      cmd = Caddy.stop(@freebsd_config)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "CADDY_ADMIN=unix//var/run/caddy/caddy.sock"
+      assert cmd_str =~ "caddy stop"
     end
   end
 
