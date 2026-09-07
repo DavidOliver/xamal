@@ -21,6 +21,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   through `Xamal.Commands.Service` based on this setting; callers
   (`Xamal.AppTasks`, `Xamal.BlueGreen`, `Xamal.ServerTasks`, `Xamal.Remove`)
   no longer reference either backend directly.
+- `ssh: [become: "doas"]` — every remote command that needs root now goes
+  through a configurable privilege-escalation command instead of a hardcoded
+  `sudo`, for hosts (common on FreeBSD) that only have `doas` installed. See
+  `mix xamal.docs ssh`.
 
 ## [0.4.2]
 

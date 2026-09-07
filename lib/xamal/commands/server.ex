@@ -13,10 +13,11 @@ defmodule Xamal.Commands.Server do
   def bootstrap(config) do
     service_dir = Configuration.service_directory(config)
     user = config.ssh.user
+    become = config.ssh.become
 
     combine([
-      ["sudo", "mkdir", "-p", service_dir],
-      ["sudo", "chown", "#{user}:#{user}", service_dir],
+      [become, "mkdir", "-p", service_dir],
+      [become, "chown", "#{user}:#{user}", service_dir],
       make_directory(Configuration.releases_directory(config)),
       make_directory("#{Configuration.env_directory(config)}/roles"),
       make_directory(Configuration.shared_directory(config)),

@@ -20,10 +20,22 @@ defmodule Xamal.Commands.ServerTest do
       cmd = Server.bootstrap(@config)
       cmd_str = Enum.join(cmd, " ")
 
+      assert cmd_str =~ "sudo mkdir -p /opt/xamal/my-app"
+      assert cmd_str =~ "sudo chown"
       assert cmd_str =~ "mkdir -p /opt/xamal/my-app/releases"
       assert cmd_str =~ "mkdir -p /opt/xamal/my-app/env/roles"
       assert cmd_str =~ "mkdir -p /opt/xamal/my-app/shared"
       assert cmd_str =~ "mkdir -p ~/.xamal"
+    end
+
+    test "uses ssh.become for privilege escalation" do
+      config = %{@config | ssh: %Xamal.Configuration.Ssh{become: "doas"}}
+      cmd = Server.bootstrap(config)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "doas mkdir -p /opt/xamal/my-app"
+      assert cmd_str =~ "doas chown"
+      refute cmd_str =~ "sudo"
     end
   end
 

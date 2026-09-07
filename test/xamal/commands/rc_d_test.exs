@@ -17,6 +17,8 @@ defmodule Xamal.Commands.RcDTest do
 
   @role %Xamal.Configuration.Role{name: "web", hosts: ["1.2.3.4"]}
 
+  @doas_config %{@config | ssh: %Xamal.Configuration.Ssh{user: "deploy", become: "doas"}}
+
   describe "generate_script_content/2" do
     test "generates a fixed-port rc.d script" do
       content = RcD.generate_script_content(@config, 4000)
@@ -62,11 +64,24 @@ defmodule Xamal.Commands.RcDTest do
       assert cmd_str =~ "sudo chmod 0555 /usr/local/etc/rc.d/my_app_4000"
       assert cmd_str =~ "sudo chmod 0555 /usr/local/etc/rc.d/my_app_4001"
     end
+
+    test "uses ssh.become for privilege escalation (e.g. doas on FreeBSD)" do
+      cmd = RcD.install_unit(@doas_config)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "doas tee /usr/local/etc/rc.d/my_app_4000"
+      assert cmd_str =~ "doas chmod 0555 /usr/local/etc/rc.d/my_app_4000"
+      refute cmd_str =~ "sudo"
+    end
   end
 
   describe "start/2" do
     test "starts via service onestart" do
       assert RcD.start(@config, 4000) == ["sudo", "service", "my_app_4000", "onestart"]
+    end
+
+    test "uses ssh.become for privilege escalation" do
+      assert RcD.start(@doas_config, 4000) == ["doas", "service", "my_app_4000", "onestart"]
     end
   end
 
@@ -121,6 +136,22 @@ defmodule Xamal.Commands.RcDTest do
                "/usr/local/etc/rc.d/my_app_4000",
                "&&",
                "sudo",
+               "rm",
+               "-f",
+               "/usr/local/etc/rc.d/my_app_4001"
+             ]
+    end
+
+    test "uses ssh.become for privilege escalation" do
+      cmd = RcD.remove_unit(@doas_config)
+
+      assert cmd == [
+               "doas",
+               "rm",
+               "-f",
+               "/usr/local/etc/rc.d/my_app_4000",
+               "&&",
+               "doas",
                "rm",
                "-f",
                "/usr/local/etc/rc.d/my_app_4001"

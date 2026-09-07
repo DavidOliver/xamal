@@ -154,6 +154,7 @@ defmodule Xamal.Docs do
 
       ssh:
         user: deploy          # SSH user (default: root)
+        become: doas          # Privilege escalation command (default: sudo)
         port: 22              # SSH port (default: 22)
         proxy: jump-host      # SSH proxy/jump host
         keys: ["~/.ssh/id_ed25519"]  # Specific key files
@@ -161,6 +162,13 @@ defmodule Xamal.Docs do
 
     SSH connections use Erlang's :ssh stdlib with connection pooling.
     Connections are reused across commands and time out after 900s idle.
+
+    ## become
+
+    Prefixed onto every remote command that needs root (installing service
+    units, writing to /opt, reloading Caddy, etc). Defaults to "sudo"; set to
+    "doas" on hosts that use OpenBSD's doas instead — common on FreeBSD boxes
+    that don't install sudo at all. Can include arguments, e.g. "doas -u root".
     """)
   end
 

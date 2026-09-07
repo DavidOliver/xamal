@@ -137,28 +137,28 @@ defmodule Xamal.Commands.RcD do
   boot — the same relationship `systemctl start`/`enable` have.
   """
   def start(config, port) do
-    ["sudo", "service", instance_name(config, port), "onestart"]
+    [config.ssh.become, "service", instance_name(config, port), "onestart"]
   end
 
   @doc """
   Stop a service instance on the given port.
   """
   def stop(config, port) do
-    ["sudo", "service", instance_name(config, port), "onestop"]
+    [config.ssh.become, "service", instance_name(config, port), "onestop"]
   end
 
   @doc """
   Enable a service instance for boot-time startup.
   """
   def enable(config, port) do
-    ["sudo", "sysrc", "#{instance_name(config, port)}_enable=YES"]
+    [config.ssh.become, "sysrc", "#{instance_name(config, port)}_enable=YES"]
   end
 
   @doc """
   Disable a service instance from boot-time startup.
   """
   def disable(config, port) do
-    ["sudo", "sysrc", "#{instance_name(config, port)}_enable=NO"]
+    [config.ssh.become, "sysrc", "#{instance_name(config, port)}_enable=NO"]
   end
 
   @doc """
@@ -177,10 +177,11 @@ defmodule Xamal.Commands.RcD do
   def remove_unit(config) do
     app_port = config.caddy.app_port
     alt_port = Caddy.alt_port(config.caddy)
+    become = config.ssh.become
 
     combine([
-      ["sudo", "rm", "-f", script_path(config, app_port)],
-      ["sudo", "rm", "-f", script_path(config, alt_port)]
+      [become, "rm", "-f", script_path(config, app_port)],
+      [become, "rm", "-f", script_path(config, alt_port)]
     ])
   end
 
@@ -198,13 +199,14 @@ defmodule Xamal.Commands.RcD do
     content = generate_script_content(config, port)
     escaped = String.replace(content, "'", "'\\''")
     path = script_path(config, port)
+    become = config.ssh.become
 
     combine([
       pipe([
         ["echo", "'#{escaped}'"],
-        ["sudo", "tee", path]
+        [become, "tee", path]
       ]),
-      ["sudo", "chmod", "0555", path]
+      [become, "chmod", "0555", path]
     ])
   end
 

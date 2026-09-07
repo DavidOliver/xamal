@@ -17,6 +17,11 @@ defmodule Xamal.Commands.CaddyTest do
 
   @freebsd_config %{@config | raw_config: Map.put(@config.raw_config, "os", "freebsd")}
 
+  @doas_freebsd_config %{
+    @freebsd_config
+    | ssh: %Xamal.Configuration.Ssh{become: "doas"}
+  }
+
   describe "install/1" do
     test "installs via apt on linux" do
       cmd = Caddy.install(@config)
@@ -29,6 +34,18 @@ defmodule Xamal.Commands.CaddyTest do
 
     test "installs via pkg on freebsd" do
       assert Caddy.install(@freebsd_config) == ["sudo", "pkg", "install", "-y", "caddy"]
+    end
+
+    test "uses ssh.become for privilege escalation on freebsd" do
+      assert Caddy.install(@doas_freebsd_config) == ["doas", "pkg", "install", "-y", "caddy"]
+    end
+
+    test "uses ssh.become for privilege escalation on linux" do
+      config = %{@config | ssh: %Xamal.Configuration.Ssh{become: "doas"}}
+      cmd_str = config |> Caddy.install() |> Enum.join(" ")
+
+      assert cmd_str =~ "doas apt-get"
+      refute cmd_str =~ "sudo"
     end
   end
 
@@ -57,6 +74,11 @@ defmodule Xamal.Commands.CaddyTest do
     test "writes to /usr/local/etc/caddy/Caddyfile on freebsd" do
       cmd = Caddy.configure_system_caddyfile(@freebsd_config)
       assert Enum.join(cmd, " ") =~ "/usr/local/etc/caddy/Caddyfile"
+    end
+
+    test "uses ssh.become for privilege escalation" do
+      cmd = Caddy.configure_system_caddyfile(@doas_freebsd_config)
+      assert Enum.join(cmd, " ") =~ "doas tee"
     end
   end
 
@@ -100,6 +122,13 @@ defmodule Xamal.Commands.CaddyTest do
       cmd = Caddy.reload(@config)
 
       assert cmd == ["sudo", "caddy", "reload", "--config", "/opt/xamal/my-app/Caddyfile"]
+    end
+
+    test "uses ssh.become for privilege escalation" do
+      config = %{@config | ssh: %Xamal.Configuration.Ssh{become: "doas"}}
+      cmd = Caddy.reload(config)
+
+      assert cmd == ["doas", "caddy", "reload", "--config", "/opt/xamal/my-app/Caddyfile"]
     end
   end
 

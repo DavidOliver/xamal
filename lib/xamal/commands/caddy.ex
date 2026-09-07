@@ -16,19 +16,21 @@ defmodule Xamal.Commands.Caddy do
   """
   def install(config) do
     if Configuration.freebsd?(config) do
-      ["sudo", "pkg", "install", "-y", "caddy"]
+      [config.ssh.become, "pkg", "install", "-y", "caddy"]
     else
-      install_via_apt()
+      install_via_apt(config)
     end
   end
 
-  defp install_via_apt do
+  defp install_via_apt(config) do
+    become = config.ssh.become
+
     combine([
-      ["sudo", "apt-get", "install", "-y", "apt-transport-https", "curl"],
+      [become, "apt-get", "install", "-y", "apt-transport-https", "curl"],
       pipe([
         ["curl", "-1sLf", "'https://dl.cloudsmith.io/public/caddy/stable/gpg.key'"],
         [
-          "sudo",
+          become,
           "gpg",
           "--batch",
           "--yes",
@@ -39,10 +41,10 @@ defmodule Xamal.Commands.Caddy do
       ]),
       pipe([
         ["curl", "-1sLf", "'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt'"],
-        ["sudo", "tee", "/etc/apt/sources.list.d/caddy-stable.list"]
+        [become, "tee", "/etc/apt/sources.list.d/caddy-stable.list"]
       ]),
-      ["sudo", "apt-get", "update"],
-      ["sudo", "apt-get", "install", "-y", "caddy"]
+      [become, "apt-get", "update"],
+      [become, "apt-get", "install", "-y", "caddy"]
     ])
   end
 
@@ -88,7 +90,7 @@ defmodule Xamal.Commands.Caddy do
   def configure_system_caddyfile(config) do
     pipe([
       ["echo", "'import /opt/xamal/*/Caddyfile'"],
-      ["sudo", "tee", system_caddyfile_path(config)]
+      [config.ssh.become, "tee", system_caddyfile_path(config)]
     ])
   end
 
@@ -96,7 +98,7 @@ defmodule Xamal.Commands.Caddy do
   Reload Caddy configuration (graceful - drains existing connections).
   """
   def reload(config) do
-    ["sudo", "caddy", "reload", "--config", caddyfile_path(config)]
+    [config.ssh.become, "caddy", "reload", "--config", caddyfile_path(config)]
   end
 
   @doc """

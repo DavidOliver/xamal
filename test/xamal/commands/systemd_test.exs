@@ -17,6 +17,8 @@ defmodule Xamal.Commands.SystemdTest do
 
   @role %Xamal.Configuration.Role{name: "web", hosts: ["1.2.3.4"]}
 
+  @doas_config %{@config | ssh: %Xamal.Configuration.Ssh{user: "deploy", become: "doas"}}
+
   describe "generate_unit_content/1" do
     test "generates valid systemd unit with placeholders" do
       content = Systemd.generate_unit_content(@config)
@@ -57,11 +59,24 @@ defmodule Xamal.Commands.SystemdTest do
       assert cmd_str =~ "sudo tee /etc/systemd/system/my_app@.service"
       assert cmd_str =~ "sudo systemctl daemon-reload"
     end
+
+    test "uses ssh.become for privilege escalation" do
+      cmd = Systemd.install_unit(@doas_config)
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "doas tee /etc/systemd/system/my_app@.service"
+      assert cmd_str =~ "doas systemctl daemon-reload"
+      refute cmd_str =~ "sudo"
+    end
   end
 
   describe "start/2" do
     test "starts service instance on given port" do
       assert Systemd.start(@config, 4000) == ["sudo", "systemctl", "start", "my_app@4000"]
+    end
+
+    test "uses ssh.become for privilege escalation" do
+      assert Systemd.start(@doas_config, 4000) == ["doas", "systemctl", "start", "my_app@4000"]
     end
   end
 
@@ -116,6 +131,21 @@ defmodule Xamal.Commands.SystemdTest do
                "/etc/systemd/system/my_app@.service",
                "&&",
                "sudo",
+               "systemctl",
+               "daemon-reload"
+             ]
+    end
+
+    test "uses ssh.become for privilege escalation" do
+      cmd = Systemd.remove_unit(@doas_config)
+
+      assert cmd == [
+               "doas",
+               "rm",
+               "-f",
+               "/etc/systemd/system/my_app@.service",
+               "&&",
+               "doas",
                "systemctl",
                "daemon-reload"
              ]
