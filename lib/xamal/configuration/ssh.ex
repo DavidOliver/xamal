@@ -6,10 +6,26 @@ defmodule Xamal.Configuration.Ssh do
   remote command that needs root (installing units/services, writing to
   `/opt`, reloading Caddy, etc.) — `"sudo"` by default, override to `"doas"`
   on hosts that use OpenBSD's `doas` instead (common on FreeBSD).
+
+  `system_ssh` (default `false`) switches command execution from Erlang's
+  `:ssh` stdlib to shelling out to the system `ssh`/`scp` binaries. Erlang's
+  `:ssh` never talks to `ssh-agent` unless explicitly wired to (it isn't,
+  here) and can't prompt for a passphrase (`user_interaction` is hardcoded
+  off), so a passphrase-protected key that only `ssh-agent` can unlock will
+  fail every connection. The system binaries pick up `SSH_AUTH_SOCK`, your
+  `~/.ssh/config`, and an already-unlocked agent the same way your regular
+  `ssh` command does. This covers command execution (`execute`,
+  `execute_command`, `streaming_exec` — bootstrap, deploy, logs -f, etc.)
+  and uploads (always via `scp` instead of the in-VM SFTP channel).
+  `interactive_exec` (`mix xamal.iex`, `app.exec -i`) is not covered — it
+  still uses Erlang's `:ssh` regardless of this setting, since giving a
+  shelled-out subprocess a real interactive TTY is a materially harder
+  problem than command execution or streaming output.
   """
 
   defstruct user: "root",
             become: "sudo",
+            system_ssh: false,
             port: 22,
             proxy: nil,
             proxy_command: nil,
@@ -27,6 +43,7 @@ defmodule Xamal.Configuration.Ssh do
     %__MODULE__{
       user: Map.get(config, "user", "root"),
       become: Map.get(config, "become", "sudo"),
+      system_ssh: Map.get(config, "system_ssh", false),
       port: Map.get(config, "port", 22),
       proxy: Map.get(config, "proxy"),
       proxy_command: Map.get(config, "proxy_command"),

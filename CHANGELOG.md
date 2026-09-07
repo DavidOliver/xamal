@@ -33,6 +33,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   you manage the system Caddyfile yourself (e.g. via separate provisioning);
   xamal then never touches it, only the per-service Caddyfile. See
   `mix xamal.docs caddy`.
+- `ssh: [system_ssh: true]` — switches command execution, log streaming, and
+  uploads from Erlang's `:ssh` stdlib to the system `ssh`/`scp` binaries.
+  Erlang's `:ssh` never talks to `ssh-agent` unless explicitly wired to
+  (xamal doesn't) and can't prompt for a passphrase (`user_interaction` is
+  hardcoded off), so a passphrase-protected key that only `ssh-agent` can
+  unlock fails every connection under the default transport. `system_ssh`
+  picks up `SSH_AUTH_SOCK`, `~/.ssh/config`, and an already-unlocked agent
+  the same way your regular `ssh` command does. Doesn't cover
+  `mix xamal.iex`/`app.exec -i` (still Erlang `:ssh` regardless of this
+  setting — a real interactive PTY over a shelled-out subprocess is a
+  harder problem than running a command or streaming output). Incompatible
+  with `ssh.key_data`, which has no system-ssh equivalent and is rejected
+  together with `system_ssh` at config-load time. See `mix xamal.docs ssh`.
 
 ### Changed
 

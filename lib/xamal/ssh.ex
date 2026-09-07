@@ -46,9 +46,21 @@ defmodule Xamal.SSH do
   @doc """
   Execute a shell command string on a remote host.
   Returns {:ok, output} or {:error, reason}.
+
+  Uses Erlang's `:ssh` by default; shells out to the system `ssh` binary
+  instead when `ssh.system_ssh` is set (see `Xamal.Configuration.Ssh`).
   """
   def execute(host, command, opts \\ []) when is_binary(command) do
     ssh_config = Keyword.get(opts, :ssh_config, %Ssh{})
+
+    if ssh_config.system_ssh do
+      execute_via_system_ssh(host, command, ssh_config)
+    else
+      execute_via_erlang_ssh(host, command, ssh_config, opts)
+    end
+  end
+
+  defp execute_via_erlang_ssh(host, command, ssh_config, opts) do
     timeout = Keyword.get(opts, :timeout, 30_000)
     hostname = Host.hostname(host)
     port = Host.port(host, ssh_config)
@@ -75,35 +87,103 @@ defmodule Xamal.SSH do
     end
   end
 
+  defp execute_via_system_ssh(host, command, ssh_config) do
+    hostname = Host.hostname(host)
+    port = Host.port(host, ssh_config)
+    args = system_ssh_args(ssh_config, hostname, port) ++ [command]
+
+    case System.cmd("ssh", args, stderr_to_stdout: true) do
+      {output, 0} -> {:ok, String.trim(output)}
+      {output, code} -> {:error, {:exit_status, code, output}}
+    end
+  end
+
+  @doc """
+  Build the argument list passed to the system `ssh`/`scp` binaries when
+  `ssh.system_ssh` is enabled (everything up to and including the
+  `user@host` destination — the caller appends the command, for `ssh`, or
+  `scp` appends its own source/destination paths).
+
+  `BatchMode=yes` means: authenticate only with what's already available
+  (an already-unlocked `ssh-agent`, or an unencrypted key) and fail fast
+  with a clear error instead of hanging on a passphrase prompt that,
+  invoked this way, has nowhere to be shown.
+  """
+  def system_ssh_args(ssh_config, hostname, port) do
+    [
+      "-p",
+      to_string(port),
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "StrictHostKeyChecking=accept-new"
+    ]
+    |> add_identity_flags(ssh_config)
+    |> add_identities_only_flag(ssh_config)
+    |> add_proxy_flags(ssh_config)
+    |> add_config_flag(ssh_config)
+    |> add_connect_timeout_flag(ssh_config)
+    |> Kernel.++(["#{ssh_config.user}@#{hostname}"])
+  end
+
+  defp add_identity_flags(args, %{keys: keys}) when is_list(keys) do
+    args ++ Enum.flat_map(keys, &["-i", Path.expand(&1)])
+  end
+
+  defp add_identity_flags(args, _ssh_config), do: args
+
+  defp add_identities_only_flag(args, %{keys_only: true}) do
+    args ++ ["-o", "IdentitiesOnly=yes"]
+  end
+
+  defp add_identities_only_flag(args, _ssh_config), do: args
+
+  defp add_proxy_flags(args, %{proxy: proxy}) when is_binary(proxy) do
+    args ++ ["-J", proxy]
+  end
+
+  defp add_proxy_flags(args, %{proxy_command: cmd}) when is_binary(cmd) do
+    args ++ ["-o", "ProxyCommand=#{cmd}"]
+  end
+
+  defp add_proxy_flags(args, _ssh_config), do: args
+
+  defp add_config_flag(args, %{config: false}), do: args ++ ["-F", "/dev/null"]
+  defp add_config_flag(args, _ssh_config), do: args
+
+  defp add_connect_timeout_flag(args, %{connect_timeout: ms}) when is_integer(ms) do
+    args ++ ["-o", "ConnectTimeout=#{max(div(ms, 1000), 1)}"]
+  end
+
+  defp add_connect_timeout_flag(args, _ssh_config), do: args
+
   @doc """
   Upload a file to a remote host.
 
-  When an on-disk private key is configured (`ssh.keys`), this shells out to the
-  system `scp` binary, which transfers at full link speed. Erlang's built-in
-  `:ssh_sftp` writes the whole file through a small SFTP window (~100-200 KB/s in
-  practice), which is pathologically slow for release tarballs (hundreds of MB) —
-  a multi-minute upload becomes seconds over scp. When no key file is available
-  (e.g. `key_data` from a secrets manager, or an agent), it falls back to the
-  in-VM SFTP channel so those flows keep working.
+  Shells out to the system `scp` binary — which transfers at full link
+  speed, unlike Erlang's built-in `:ssh_sftp` (~100-200 KB/s in practice,
+  pathologically slow for release tarballs) — whenever `ssh.system_ssh` is
+  set, or an on-disk private key is configured (`ssh.keys`). Otherwise
+  falls back to the in-VM SFTP channel (`key_data` from a secrets manager,
+  or Erlang `:ssh` relying on an agent it can't actually reach).
   """
   def upload(host, local_path, remote_path, opts \\ []) do
     ssh_config = Keyword.get(opts, :ssh_config, %Ssh{})
     hostname = Host.hostname(host)
     port = Host.port(host, ssh_config)
 
-    # Use scp only when both an on-disk key and the scp binary are available.
+    key_path =
+      case key_file(ssh_config) do
+        {:ok, path} -> path
+        :none -> nil
+      end
+
     # A missing scp binary falls back to SFTP instead of raising :enoent, so
     # the upload still succeeds (just slower) and the contract is preserved.
-    case key_file(ssh_config) do
-      {:ok, key_path} ->
-        if scp_available?() do
-          upload_via_scp(key_path, ssh_config.user, hostname, port, local_path, remote_path)
-        else
-          upload_via_sftp_pooled(ssh_config, hostname, port, local_path, remote_path)
-        end
-
-      :none ->
-        upload_via_sftp_pooled(ssh_config, hostname, port, local_path, remote_path)
+    if (ssh_config.system_ssh or key_path) and scp_available?() do
+      upload_via_scp(key_path, ssh_config, hostname, port, local_path, remote_path)
+    else
+      upload_via_sftp_pooled(ssh_config, hostname, port, local_path, remote_path)
     end
   end
 
@@ -153,25 +233,29 @@ defmodule Xamal.SSH do
 
   Uses an arg list (not a shell string) to avoid the shell, and carries the
   non-interactive deploy flags `BatchMode=yes` and
-  `StrictHostKeyChecking=accept-new`.
+  `StrictHostKeyChecking=accept-new`. `key_path` is optional (`nil` omits
+  `-i` entirely) — for `ssh.system_ssh`, where authentication may rely on
+  `ssh-agent`/`~/.ssh/config` rather than an identity file named here.
   """
   def scp_args(key_path, user, hostname, port, local_path, remote_path) do
-    [
-      "-i",
-      key_path,
-      "-P",
-      to_string(port),
-      "-o",
-      "BatchMode=yes",
-      "-o",
-      "StrictHostKeyChecking=accept-new",
-      local_path,
-      "#{user}@#{hostname}:#{remote_path}"
-    ]
+    identity(key_path) ++
+      [
+        "-P",
+        to_string(port),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        local_path,
+        "#{user}@#{hostname}:#{remote_path}"
+      ]
   end
 
-  defp upload_via_scp(key_path, user, hostname, port, local_path, remote_path) do
-    args = scp_args(key_path, user, hostname, port, local_path, remote_path)
+  defp identity(nil), do: []
+  defp identity(key_path), do: ["-i", key_path]
+
+  defp upload_via_scp(key_path, ssh_config, hostname, port, local_path, remote_path) do
+    args = scp_args(key_path, ssh_config.user, hostname, port, local_path, remote_path)
 
     case System.cmd("scp", args, stderr_to_stdout: true) do
       {_, 0} -> {:ok, remote_path}
@@ -266,6 +350,15 @@ defmodule Xamal.SSH do
   """
   def streaming_exec(host, command, opts \\ []) do
     ssh_config = Keyword.get(opts, :ssh_config, %Ssh{})
+
+    if ssh_config.system_ssh do
+      streaming_exec_via_system_ssh(host, command, ssh_config)
+    else
+      streaming_exec_via_erlang_ssh(host, command, ssh_config, opts)
+    end
+  end
+
+  defp streaming_exec_via_erlang_ssh(host, command, ssh_config, opts) do
     timeout = Keyword.get(opts, :timeout, :infinity)
     hostname = Host.hostname(host)
     port = Host.port(host, ssh_config)
@@ -282,6 +375,17 @@ defmodule Xamal.SSH do
       after
         ConnectionPool.checkin(hostname, port, ssh_config.user)
       end
+    end
+  end
+
+  defp streaming_exec_via_system_ssh(host, command, ssh_config) do
+    hostname = Host.hostname(host)
+    port = Host.port(host, ssh_config)
+    args = system_ssh_args(ssh_config, hostname, port) ++ [command]
+
+    case System.cmd("ssh", args, stderr_to_stdout: true, into: IO.stream(:stdio, :line)) do
+      {_, 0} -> :ok
+      {_, code} -> {:error, {:exit_status, code, ""}}
     end
   end
 

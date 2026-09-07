@@ -59,6 +59,81 @@ defmodule Xamal.SSHTest do
 
       assert ["-P", "22"] == Enum.slice(args, 2, 2)
     end
+
+    test "omits -i entirely when key_path is nil (agent-only auth)" do
+      args = Xamal.SSH.scp_args(nil, "deploy", "10.0.0.1", 22, "local", "remote")
+
+      refute "-i" in args
+      assert ["-P", "22"] == Enum.take(args, 2)
+    end
+  end
+
+  describe "system_ssh_args/3" do
+    test "includes port and non-interactive/agent-friendly options" do
+      args = Xamal.SSH.system_ssh_args(%Ssh{user: "deploy"}, "10.0.0.1", 2222)
+
+      assert "-p" in args
+      assert "2222" in args
+      assert "BatchMode=yes" in args
+      assert "StrictHostKeyChecking=accept-new" in args
+      assert "deploy@10.0.0.1" in args
+    end
+
+    test "adds -i for each configured key, expanding a leading ~" do
+      args =
+        Xamal.SSH.system_ssh_args(%Ssh{user: "deploy", keys: ["~/.ssh/a", "/keys/b"]}, "h", 22)
+
+      assert Enum.count(args, &(&1 == "-i")) == 2
+      assert Path.expand("~/.ssh/a") in args
+      assert "/keys/b" in args
+    end
+
+    test "omits -i when no keys are configured (agent-only)" do
+      args = Xamal.SSH.system_ssh_args(%Ssh{user: "deploy"}, "h", 22)
+
+      refute "-i" in args
+    end
+
+    test "adds IdentitiesOnly=yes only when keys_only is true" do
+      refute "IdentitiesOnly=yes" in Xamal.SSH.system_ssh_args(%Ssh{user: "d"}, "h", 22)
+
+      args = Xamal.SSH.system_ssh_args(%Ssh{user: "d", keys_only: true}, "h", 22)
+      assert "IdentitiesOnly=yes" in args
+    end
+
+    test "adds -J for a proxy jump host" do
+      args = Xamal.SSH.system_ssh_args(%Ssh{user: "d", proxy: "bastion.example.com"}, "h", 22)
+
+      assert ["-J", "bastion.example.com"] |> Enum.all?(&(&1 in args))
+    end
+
+    test "adds a ProxyCommand option when proxy_command is set" do
+      args = Xamal.SSH.system_ssh_args(%Ssh{user: "d", proxy_command: "nc %h %p"}, "h", 22)
+
+      assert "ProxyCommand=nc %h %p" in args
+    end
+
+    test "adds -F /dev/null when config: false" do
+      args = Xamal.SSH.system_ssh_args(%Ssh{user: "d", config: false}, "h", 22)
+
+      assert ["-F", "/dev/null"] |> Enum.all?(&(&1 in args))
+    end
+
+    test "does not add -F when config is not explicitly false" do
+      refute "-F" in Xamal.SSH.system_ssh_args(%Ssh{user: "d"}, "h", 22)
+    end
+
+    test "converts connect_timeout from milliseconds to whole seconds" do
+      args = Xamal.SSH.system_ssh_args(%Ssh{user: "d", connect_timeout: 15_000}, "h", 22)
+
+      assert "ConnectTimeout=15" in args
+    end
+
+    test "rounds a sub-second connect_timeout up to 1 second" do
+      args = Xamal.SSH.system_ssh_args(%Ssh{user: "d", connect_timeout: 500}, "h", 22)
+
+      assert "ConnectTimeout=1" in args
+    end
   end
 
   describe "format_error/3" do

@@ -71,5 +71,26 @@ defmodule Xamal.Configuration.ValidatorTest do
         Configuration.new(Map.put(@valid_config, "os", "plan9"))
       end
     end
+
+    test "accepts system_ssh alone" do
+      config =
+        Configuration.new(Map.put(@valid_config, "ssh", %{"system_ssh" => true}))
+
+      assert config.ssh.system_ssh == true
+    end
+
+    test "accepts key_data alone" do
+      config = Configuration.new(Map.put(@valid_config, "ssh", %{"key_data" => "PEM"}))
+      assert config.ssh.key_data == "PEM"
+    end
+
+    test "rejects system_ssh combined with key_data" do
+      config =
+        Map.put(@valid_config, "ssh", %{"system_ssh" => true, "key_data" => "PEM"})
+
+      assert_raise ArgumentError, ~r/system_ssh and ssh.key_data can't be combined/, fn ->
+        Configuration.new(config)
+      end
+    end
   end
 end

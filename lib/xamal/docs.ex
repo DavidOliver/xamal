@@ -155,13 +155,15 @@ defmodule Xamal.Docs do
       ssh:
         user: deploy          # SSH user (default: root)
         become: doas          # Privilege escalation command (default: sudo)
+        system_ssh: true      # Shell out to system ssh/scp (default: false)
         port: 22              # SSH port (default: 22)
         proxy: jump-host      # SSH proxy/jump host
         keys: ["~/.ssh/id_ed25519"]  # Specific key files
         keys_only: true       # Only use specified keys
 
-    SSH connections use Erlang's :ssh stdlib with connection pooling.
-    Connections are reused across commands and time out after 900s idle.
+    SSH connections use Erlang's :ssh stdlib with connection pooling by
+    default. Connections are reused across commands and time out after 900s
+    idle.
 
     ## become
 
@@ -169,6 +171,33 @@ defmodule Xamal.Docs do
     units, writing to /opt, reloading Caddy, etc). Defaults to "sudo"; set to
     "doas" on hosts that use OpenBSD's doas instead — common on FreeBSD boxes
     that don't install sudo at all. Can include arguments, e.g. "doas -u root".
+
+    ## system_ssh
+
+    Switches command execution and uploads from Erlang's :ssh stdlib to the
+    system ssh/scp binaries. Erlang's :ssh never talks to ssh-agent unless
+    explicitly wired to (xamal doesn't), and can't prompt for a passphrase
+    (user_interaction is hardcoded off) — so a passphrase-protected key that
+    only ssh-agent can unlock fails every connection under the default
+    transport, even though your own `ssh`/`scp` commands work fine with an
+    already-unlocked agent. Turning this on picks up SSH_AUTH_SOCK, your
+    ~/.ssh/config, and an unlocked agent the same way your regular ssh
+    command does — nothing else about your config needs to change.
+
+    Covers: mix xamal.server.bootstrap, mix xamal.deploy, mix xamal.app.*,
+    mix xamal.build.upload, mix xamal.server.logs, mix xamal.app.logs -f —
+    effectively everything except `mix xamal.iex` / `mix xamal.app.exec -i`,
+    which still use Erlang's :ssh regardless of this setting (an
+    interactive PTY over a shelled-out subprocess is a harder problem than
+    running a command or streaming its output).
+
+    Authentication itself is out of xamal's hands once this is on — it's
+    exactly whatever `ssh user@host` already does for you in a terminal.
+    `ssh.keys`/`keys_only`/`proxy`/`proxy_command`/`config` still map onto
+    the equivalent `-i`/`-o IdentitiesOnly=yes`/`-J`/`-o ProxyCommand=`/`-F`
+    flags; `ssh.key_data` (raw key material for a secrets-manager flow) has
+    no system-ssh equivalent and is rejected together with `system_ssh` at
+    config-load time.
     """)
   end
 

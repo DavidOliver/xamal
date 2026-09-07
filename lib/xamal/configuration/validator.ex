@@ -11,6 +11,7 @@ defmodule Xamal.Configuration.Validator do
     validate_retain_releases!(config)
     validate_destination!(config)
     validate_os!(config)
+    validate_ssh!(config)
     :ok
   end
 
@@ -58,6 +59,18 @@ defmodule Xamal.Configuration.Validator do
 
     unless os in ["linux", "freebsd"] do
       raise ArgumentError, "Unsupported os: #{inspect(os)}. Must be \"linux\" or \"freebsd\""
+    end
+  end
+
+  defp validate_ssh!(config) do
+    ssh = config.ssh
+
+    if ssh.system_ssh && ssh.key_data do
+      raise ArgumentError,
+            "ssh.system_ssh and ssh.key_data can't be combined: key_data feeds raw key " <>
+              "material to Erlang's :ssh client directly, which the system ssh/scp binaries " <>
+              "have no equivalent for. Use ssh.keys (an on-disk key path) or rely on " <>
+              "ssh-agent instead."
     end
   end
 end
