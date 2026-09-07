@@ -10,13 +10,13 @@ defmodule Xamal.BlueGreen do
 
   def swap(host, config, version, opts, context) do
     ports = select_ports(host, config)
-    ssh_exec(host, Server.link_current(config, version), config)
-    ssh_exec(host, Service.start(config, ports.new), config)
+    ssh_exec!(host, Server.link_current(config, version), config)
+    ssh_exec!(host, Service.start(config, ports.new), config)
     wait_for_health!(host, config, ports.new, Keyword.get(opts, :rollback_version))
     reload_caddy(host, config, ports.new, Keyword.get(opts, :skip_hooks, true), context)
     stop_old_release(host, config, ports)
     enable_new_release(host, config, ports)
-    ssh_exec(host, Caddy.write_active_port(config, ports.new), config)
+    ssh_exec!(host, Caddy.write_active_port(config, ports.new), config)
     ports.new
   end
 
@@ -55,17 +55,17 @@ defmodule Xamal.BlueGreen do
 
   defp rollback_failed_boot(host, config, new_port, rollback_version) do
     say("  Health check timed out on #{host}:#{new_port}!", :red)
-    ssh_exec(host, Service.stop(config, new_port), config)
+    ssh_exec!(host, Service.stop(config, new_port), config)
 
     if rollback_version do
-      ssh_exec(host, Server.link_current(config, rollback_version), config)
+      ssh_exec!(host, Server.link_current(config, rollback_version), config)
     end
   end
 
   defp reload_caddy(host, config, new_port, skip_hooks, context) do
     run_hook("pre-caddy-reload", [skip_hooks: skip_hooks], context)
-    ssh_exec(host, Caddy.write_caddyfile(config, new_port), config)
-    ssh_exec(host, Caddy.reload(config), config)
+    ssh_exec!(host, Caddy.write_caddyfile(config, new_port), config)
+    ssh_exec!(host, Caddy.reload(config), config)
     run_hook("post-caddy-reload", [skip_hooks: skip_hooks], context)
   end
 
@@ -73,16 +73,16 @@ defmodule Xamal.BlueGreen do
        when active_port != new_port do
     drain = Configuration.drain_timeout(config)
     say("  Stopping old release (#{drain}s drain timeout)...", :magenta)
-    ssh_exec(host, Service.stop(config, active_port), config)
+    ssh_exec!(host, Service.stop(config, active_port), config)
   end
 
   defp stop_old_release(_host, _config, _ports), do: :ok
 
   defp enable_new_release(host, config, %{active: active_port, new: new_port}) do
-    ssh_exec(host, Service.enable(config, new_port), config)
+    ssh_exec!(host, Service.enable(config, new_port), config)
 
     if active_port != new_port do
-      ssh_exec(host, Service.disable(config, active_port), config)
+      ssh_exec!(host, Service.disable(config, active_port), config)
     end
   end
 end

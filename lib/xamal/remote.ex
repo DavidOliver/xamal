@@ -8,10 +8,12 @@ defmodule Xamal.Remote do
 
   @spec on_primary(command_parts(), Xamal.Context.t()) :: {:ok, String.t()} | {:error, term()}
   @spec on_hosts(command_parts(), Xamal.Context.t()) :: [{String.t(), term()}]
+  @spec on_hosts!(command_parts(), Xamal.Context.t()) :: :ok
   @spec record_audit(String.t(), map(), Xamal.Context.t()) :: term()
   @spec read_active_port(String.t(), Xamal.Configuration.t()) :: integer() | nil
   @spec ssh_exec(String.t(), command_parts(), Xamal.Configuration.t()) ::
           {:ok, String.t()} | {:error, term()}
+  @spec ssh_exec!(String.t(), command_parts(), Xamal.Configuration.t()) :: String.t()
 
   def on_primary(command_parts, context) do
     config = context.config
@@ -25,6 +27,20 @@ defmodule Xamal.Remote do
     context
     |> Xamal.Context.hosts()
     |> SSH.on(fn host -> SSH.execute_command(host, command_parts, ssh_config: config.ssh) end)
+  end
+
+  @doc """
+  Like `on_hosts/2`, but raises on the first host whose command failed
+  instead of returning the per-host results for the caller to inspect (or
+  not).
+  """
+  def on_hosts!(command_parts, context) do
+    command_parts
+    |> on_hosts(context)
+    |> Enum.each(fn
+      {_host, {:ok, _}} -> :ok
+      {host, {:error, reason}} -> Mix.raise(SSH.format_error(host, command_parts, reason))
+    end)
   end
 
   def record_audit(message, details, context) do
@@ -46,6 +62,13 @@ defmodule Xamal.Remote do
 
   def ssh_exec(host, cmd, config) do
     SSH.execute_command(host, cmd, ssh_config: config.ssh)
+  end
+
+  @doc """
+  Like `ssh_exec/3`, but raises instead of returning `{:error, _}`.
+  """
+  def ssh_exec!(host, cmd, config) do
+    SSH.execute_command!(host, cmd, ssh_config: config.ssh)
   end
 
   defp parse_port(port_str) do

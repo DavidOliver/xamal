@@ -55,6 +55,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   was dropping every other site and any global options block from the
   *running* config on every deploy, not just at bootstrap. This dates back
   to xamal's initial commit.
+- SSH command failures are no longer silently swallowed. Most deploy steps
+  (blue-green swap, env file upload, `mix xamal.server.bootstrap`,
+  `mix xamal.build.upload`, `mix xamal.remove`) discarded the result of
+  `SSH.execute_command`/`on_hosts` entirely, so a failing step — a bad rc.d
+  script, a permission error, a dropped connection — would leave the task
+  printing success (`Bootstrapped <host>`, `Deployed to <host>`, `Removed!`)
+  having done nothing, or half of something. New `SSH.execute_command!/3`,
+  `Remote.ssh_exec!/3`, and `Remote.on_hosts!/2` raise immediately with the
+  host, the command, and the underlying failure reason instead.
 
 ## [0.4.2]
 

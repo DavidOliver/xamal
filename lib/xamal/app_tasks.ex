@@ -81,8 +81,8 @@ defmodule Xamal.AppTasks do
 
     Enum.each(hosts, fn host ->
       cmd = Caddy.write_maintenance_caddyfile(config)
-      SSH.execute_command(host, cmd, ssh_config: config.ssh)
-      SSH.execute_command(host, Caddy.reload(config), ssh_config: config.ssh)
+      SSH.execute_command!(host, cmd, ssh_config: config.ssh)
+      SSH.execute_command!(host, Caddy.reload(config), ssh_config: config.ssh)
       say("  Maintenance mode enabled on #{host}", :green)
     end)
 
@@ -188,8 +188,8 @@ defmodule Xamal.AppTasks do
       active_port = read_active_port(host, config) || config.caddy.app_port
 
       cmd = Caddy.write_caddyfile(config, active_port)
-      SSH.execute_command(host, cmd, ssh_config: config.ssh)
-      SSH.execute_command(host, Caddy.reload(config), ssh_config: config.ssh)
+      SSH.execute_command!(host, cmd, ssh_config: config.ssh)
+      SSH.execute_command!(host, Caddy.reload(config), ssh_config: config.ssh)
       say("  Live mode restored on #{host} (port #{active_port})", :green)
     end)
 
@@ -288,8 +288,8 @@ defmodule Xamal.AppTasks do
     env_content = EnvFile.encode(Configuration.Env.to_map(env))
     env_path = Configuration.Role.secrets_path(role, config)
 
-    ssh_exec(host, CommandBase.make_directory(Path.dirname(env_path)), config)
-    ssh_exec(host, CommandBase.write([["echo", "'#{env_content}'"], [env_path]]), config)
-    ssh_exec(host, Service.write_env_symlink(config, role), config)
+    ssh_exec!(host, CommandBase.make_directory(Path.dirname(env_path)), config)
+    ssh_exec!(host, CommandBase.write([["echo", "'#{env_content}'"], [env_path]]), config)
+    ssh_exec!(host, Service.write_env_symlink(config, role), config)
   end
 end

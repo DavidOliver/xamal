@@ -60,4 +60,50 @@ defmodule Xamal.SSHTest do
       assert ["-P", "22"] == Enum.slice(args, 2, 2)
     end
   end
+
+  describe "format_error/3" do
+    test "includes the host and the joined command" do
+      message = Xamal.SSH.format_error("10.0.0.1", ["ls", "-la", "/opt"], :timeout)
+
+      assert message =~ "10.0.0.1"
+      assert message =~ "ls -la /opt"
+    end
+
+    test "formats a nonzero exit status with its captured output" do
+      message = Xamal.SSH.format_error("host", ["false"], {:exit_status, 1, "permission denied"})
+
+      assert message =~ "exited 1"
+      assert message =~ "permission denied"
+    end
+
+    test "formats a nonzero exit status with no output" do
+      message = Xamal.SSH.format_error("host", ["false"], {:exit_status, 127, ""})
+
+      assert message =~ "exited 127"
+      assert message =~ "(no output)"
+    end
+
+    test "formats a connection failure with host, port, and the underlying reason" do
+      reason =
+        {:ssh_connection_failed, "10.0.0.1", 22,
+         "Unable to connect using the available authentication methods"}
+
+      message = Xamal.SSH.format_error("10.0.0.1", ["true"], reason)
+
+      assert message =~ "could not connect to 10.0.0.1:22"
+      assert message =~ "Unable to connect using the available authentication methods"
+    end
+
+    test "formats a plain timeout" do
+      message = Xamal.SSH.format_error("host", ["true"], :timeout)
+
+      assert message =~ "timed out"
+    end
+
+    test "falls back to inspect for an unrecognized reason shape" do
+      message = Xamal.SSH.format_error("host", ["true"], {:weird, :reason})
+
+      assert message =~ inspect({:weird, :reason})
+    end
+  end
 end

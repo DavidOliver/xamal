@@ -34,12 +34,12 @@ defmodule Xamal.Remove do
 
   defp remove_systemd(config, context) do
     say("Removing service units...", :magenta)
-    on_hosts(Service.disable_all(config), context)
-    on_hosts(Service.remove_unit(config), context)
+    on_hosts!(Service.disable_all(config), context)
+    on_hosts!(Service.remove_unit(config), context)
   end
 
   defp remove_service_directory(config, context) do
     say("Removing service directory...", :magenta)
-    on_hosts(ServerCommand.remove_service_directory(config), context)
+    on_hosts!(ServerCommand.remove_service_directory(config), context)
   end
 end

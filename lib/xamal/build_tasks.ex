@@ -125,7 +125,7 @@ defmodule Xamal.BuildTasks do
 
       # Create remote directory
       mkdir_cmd = Base.make_directory(remote_dir)
-      SSH.execute_command(host, mkdir_cmd, ssh_config: config.ssh)
+      SSH.execute_command!(host, mkdir_cmd, ssh_config: config.ssh)
 
       # Upload via SFTP (works with key_data)
       remote_path = "#{remote_dir}/#{Builder.tarball_name(config)}"
@@ -134,7 +134,7 @@ defmodule Xamal.BuildTasks do
         {:ok, _} ->
           # Unpack on remote
           unpack_cmd = Builder.unpack_tarball(config)
-          SSH.execute_command(host, unpack_cmd, ssh_config: config.ssh)
+          SSH.execute_command!(host, unpack_cmd, ssh_config: config.ssh)
           say("  Deployed to #{host}", :green)
 
         {:error, reason} ->

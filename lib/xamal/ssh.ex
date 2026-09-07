@@ -189,6 +189,54 @@ defmodule Xamal.SSH do
   end
 
   @doc """
+  Like `execute_command/3`, but raises with a clear message instead of
+  returning `{:error, _}`.
+
+  Use this for steps whose failure must stop the task rather than let it
+  carry on and report success — most of what a deploy step does (creating a
+  release symlink, starting/stopping a service, writing a Caddyfile) is only
+  safe to skip past if it actually succeeded.
+  """
+  def execute_command!(host, command_parts, opts \\ []) when is_list(command_parts) do
+    case execute_command(host, command_parts, opts) do
+      {:ok, output} ->
+        output
+
+      {:error, reason} ->
+        Mix.raise(format_error(host, command_parts, reason))
+    end
+  end
+
+  @doc false
+  def format_error(host, command_parts, reason) do
+    command = Enum.map_join(command_parts, " ", &to_string/1)
+
+    "SSH command failed on #{host}\n" <>
+      "  command: #{command}\n" <>
+      "  reason: #{format_reason(reason)}"
+  end
+
+  defp format_reason({:exit_status, status, output}) do
+    detail = if output in [nil, ""], do: "(no output)", else: indent(output)
+    "remote command exited #{status}\n#{detail}"
+  end
+
+  defp format_reason({:ssh_connection_failed, host, port, reason}) do
+    "could not connect to #{host}:#{port} — #{inspect(reason)}"
+  end
+
+  defp format_reason(:timeout), do: "timed out waiting for a response"
+  defp format_reason(other), do: inspect(other)
+
+  defp indent(text) do
+    text
+    |> String.split("\n")
+    |> Enum.map(&["    ", &1])
+    |> Enum.intersperse("\n")
+    |> IO.iodata_to_binary()
+  end
+
+  @doc """
   Run a command interactively with a PTY (for IEx remote, bash, etc.).
   Connects local stdin/stdout to the remote session.
   """
