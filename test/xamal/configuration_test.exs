@@ -205,6 +205,17 @@ defmodule Xamal.ConfigurationTest do
       assert Caddy.alt_port(caddy) == 4001
     end
 
+    test "manage_system_caddyfile? defaults to true" do
+      assert Caddy.manage_system_caddyfile?(Caddy.new(%{}))
+      assert Caddy.manage_system_caddyfile?(Caddy.new(nil))
+      assert Caddy.manage_system_caddyfile?(%Caddy{})
+    end
+
+    test "manage_system_caddyfile? honors an explicit false" do
+      caddy = Caddy.new(%{"manage_system_caddyfile" => false})
+      refute Caddy.manage_system_caddyfile?(caddy)
+    end
+
     test "generate_caddyfile with host" do
       caddy = Caddy.new(%{"host" => "app.example.com"})
       caddyfile = Caddy.generate_caddyfile(caddy, 4000)

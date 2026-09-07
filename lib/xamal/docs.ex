@@ -193,6 +193,35 @@ defmodule Xamal.Docs do
 
     The generated Caddyfile lives at /opt/xamal/<service>/Caddyfile.
 
+    ## The system Caddyfile
+
+    `mix xamal.server.bootstrap` ensures the system Caddyfile
+    (/etc/caddy/Caddyfile, or /usr/local/etc/caddy/Caddyfile on FreeBSD)
+    contains:
+
+      import /opt/xamal/*/Caddyfile
+
+    appending that line only if it's missing — nothing else in the file is
+    touched or overwritten. Every xamal-managed service's Caddyfile is
+    picked up by the same wildcard, so this is safe to run from multiple
+    services on one host without any of them stepping on each other.
+
+    Anything else that belongs in that file — a global options block
+    (`email`, custom `http_port`/`https_port`, etc), other sites — is
+    host-wide, not a per-service concern, so there's no xamal config for it.
+    Manage it yourself directly in the system Caddyfile.
+
+    ## manage_system_caddyfile
+
+      caddy:
+        manage_system_caddyfile: false   # default: true
+
+    Set to false if you don't want xamal touching the system Caddyfile at
+    all — not even to ensure the import line. `mix xamal.server.bootstrap`
+    still writes the per-service Caddyfile at /opt/xamal/<service>/Caddyfile,
+    but you're responsible for adding `import /opt/xamal/*/Caddyfile` to
+    your own Caddyfile yourself.
+
     ## extra_config
 
       caddy:

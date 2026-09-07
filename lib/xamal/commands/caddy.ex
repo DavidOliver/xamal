@@ -10,6 +10,7 @@ defmodule Xamal.Commands.Caddy do
 
   @freebsd_caddyfile "/usr/local/etc/caddy/Caddyfile"
   @freebsd_logfile "/var/log/caddy/caddy.log"
+  @import_line "import /opt/xamal/*/Caddyfile"
 
   @doc """
   Install Caddy: via apt on Debian/Ubuntu, or via pkg on FreeBSD.
@@ -84,14 +85,33 @@ defmodule Xamal.Commands.Caddy do
   end
 
   @doc """
-  Replace the system Caddyfile with an import directive so Caddy picks up
-  service Caddyfiles on reboot.
+  Ensure the system Caddyfile imports service Caddyfiles, without touching
+  anything else in the file — appends the import line only if it isn't
+  already present, so any global options block or other sites you manage
+  there yourself are left alone. Creates the file if it doesn't exist yet;
+  if it exists but its last line has no trailing newline, one is inserted
+  first so the import line lands on its own line instead of getting glued
+  onto the end of whatever was already there.
   """
   def configure_system_caddyfile(config) do
-    pipe([
-      ["echo", "'import /opt/xamal/*/Caddyfile'"],
-      [config.ssh.become, "tee", system_caddyfile_path(config)]
-    ])
+    path = system_caddyfile_path(config)
+
+    [config.ssh.become | shell([import_ensure_script(path)])]
+  end
+
+  @doc """
+  The raw shell script `configure_system_caddyfile/1` runs (unescaped, not
+  yet wrapped for remote execution) — public so it can be exercised directly.
+  """
+  def import_ensure_script(path) do
+    """
+    grep -qxF '#{@import_line}' #{path} 2>/dev/null || {
+        if [ -s #{path} ] && [ -n "$(tail -c1 #{path})" ]; then
+            printf '\\n' >> #{path}
+        fi
+        printf '%s\\n' '#{@import_line}' >> #{path}
+    }
+    """
   end
 
   @doc """

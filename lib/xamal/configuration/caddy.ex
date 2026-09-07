@@ -5,6 +5,16 @@ defmodule Xamal.Configuration.Caddy do
   `extra_config` is raw Caddyfile text spliced into the generated site block
   alongside `reverse_proxy` — the escape hatch for anything xamal doesn't
   model directly (request blocking by header/path, custom matchers, etc.).
+
+  `manage_system_caddyfile` (default `true`) controls whether
+  `mix xamal.server.bootstrap` ensures the system Caddyfile imports service
+  Caddyfiles (`import /opt/xamal/*/Caddyfile`, appended only if missing —
+  nothing else in that file is touched). Set it to `false` if you manage
+  that import yourself (e.g. via separate provisioning); xamal then never
+  touches the system Caddyfile at all, only the per-service one. There's no
+  xamal config for anything else in the system Caddyfile (a global options
+  block, other sites) — that's entirely up to whatever manages the file,
+  since it's host-wide, not a per-service concern.
   """
 
   defstruct [
@@ -12,7 +22,8 @@ defmodule Xamal.Configuration.Caddy do
     :hosts,
     :app_port,
     :ssl,
-    :extra_config
+    :extra_config,
+    :manage_system_caddyfile
   ]
 
   def new(config) when is_map(config) do
@@ -21,7 +32,8 @@ defmodule Xamal.Configuration.Caddy do
       hosts: Map.get(config, "hosts", []),
       app_port: Map.get(config, "app_port", 4000),
       ssl: Map.get(config, "ssl", true),
-      extra_config: Map.get(config, "extra_config")
+      extra_config: Map.get(config, "extra_config"),
+      manage_system_caddyfile: Map.get(config, "manage_system_caddyfile", true)
     }
   end
 
@@ -39,6 +51,13 @@ defmodule Xamal.Configuration.Caddy do
   The alternate port used during blue-green deploy.
   """
   def alt_port(%__MODULE__{app_port: port}), do: port + 1
+
+  @doc """
+  Whether `mix xamal.server.bootstrap` should write the system Caddyfile.
+  Defaults to `true`; `false` means you manage that file yourself.
+  """
+  def manage_system_caddyfile?(%__MODULE__{manage_system_caddyfile: false}), do: false
+  def manage_system_caddyfile?(%__MODULE__{}), do: true
 
   @doc """
   Generate a Caddyfile for the given upstream port.

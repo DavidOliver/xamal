@@ -66,19 +66,76 @@ defmodule Xamal.Commands.CaddyTest do
   end
 
   describe "configure_system_caddyfile/1" do
-    test "writes to /etc/caddy/Caddyfile on linux" do
+    test "wraps import_ensure_script/1 in sh -c, prefixed with become" do
       cmd = Caddy.configure_system_caddyfile(@config)
-      assert Enum.join(cmd, " ") =~ "/etc/caddy/Caddyfile"
+
+      assert [become, "sh", "-c", _quoted] = cmd
+      assert become == "sudo"
     end
 
-    test "writes to /usr/local/etc/caddy/Caddyfile on freebsd" do
+    test "targets /usr/local/etc/caddy/Caddyfile on freebsd" do
       cmd = Caddy.configure_system_caddyfile(@freebsd_config)
       assert Enum.join(cmd, " ") =~ "/usr/local/etc/caddy/Caddyfile"
     end
 
-    test "uses ssh.become for privilege escalation" do
+    test "uses ssh.become for privilege escalation, wrapping the whole script" do
       cmd = Caddy.configure_system_caddyfile(@doas_freebsd_config)
-      assert Enum.join(cmd, " ") =~ "doas tee"
+
+      assert hd(cmd) == "doas"
+      refute Enum.join(cmd, " ") =~ "sudo"
+    end
+  end
+
+  describe "import_ensure_script/1" do
+    test "checks for the import line before appending" do
+      script = Caddy.import_ensure_script("/etc/caddy/Caddyfile")
+
+      assert script =~ "grep -qxF 'import /opt/xamal/*/Caddyfile' /etc/caddy/Caddyfile"
+      assert script =~ "||"
+    end
+
+    test "appends rather than overwrites (only >>, never a bare >)" do
+      script = Caddy.import_ensure_script("/etc/caddy/Caddyfile")
+
+      refute script =~ ~r/[^>]> \/etc\/caddy\/Caddyfile/
+      assert script =~ ">> /etc/caddy/Caddyfile"
+    end
+
+    test "guards against a missing trailing newline before appending" do
+      script = Caddy.import_ensure_script("/etc/caddy/Caddyfile")
+
+      assert script =~ "tail -c1"
+      assert script =~ "-s /etc/caddy/Caddyfile"
+    end
+
+    test "behaves correctly end-to-end against a real file, for every starting state" do
+      cases = [
+        {"missing file", nil, ["import /opt/xamal/*/Caddyfile"]},
+        {"empty file", "", ["import /opt/xamal/*/Caddyfile"]},
+        {"trailing newline", "foo {\n  bar\n}\n",
+         ["foo {", "  bar", "}", "import /opt/xamal/*/Caddyfile"]},
+        {"no trailing newline", "foo {\n  bar\n}",
+         ["foo {", "  bar", "}", "import /opt/xamal/*/Caddyfile"]}
+      ]
+
+      for {label, initial, expected_lines} <- cases do
+        path = Path.join(System.tmp_dir!(), "xamal_caddyfile_test_#{System.unique_integer()}")
+        if initial, do: File.write!(path, initial)
+
+        script = Caddy.import_ensure_script(path)
+        {output, 0} = System.cmd("sh", ["-c", script], stderr_to_stdout: true)
+        assert output == "", "#{label}: expected no output, got #{inspect(output)}"
+
+        content = File.read!(path)
+        assert String.split(content, "\n", trim: true) == expected_lines, label
+        assert String.ends_with?(content, "\n"), "#{label}: should end with a newline"
+
+        # Idempotent: running it again must not duplicate the import line.
+        {_, 0} = System.cmd("sh", ["-c", script], stderr_to_stdout: true)
+        assert File.read!(path) == content, "#{label}: second run changed the file"
+
+        File.rm(path)
+      end
     end
   end
 

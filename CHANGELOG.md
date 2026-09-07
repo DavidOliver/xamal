@@ -29,6 +29,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   site block alongside `reverse_proxy`, an escape hatch for anything xamal
   doesn't model directly (blocking by header/path, custom matchers, etc.).
   See `mix xamal.docs caddy`.
+- `caddy: [manage_system_caddyfile:]` (default `true`) — set to `false` if
+  you manage the system Caddyfile yourself (e.g. via separate provisioning);
+  xamal then never touches it, only the per-service Caddyfile. See
+  `mix xamal.docs caddy`.
+
+### Changed
+
+- `mix xamal.server.bootstrap` no longer overwrites the system Caddyfile
+  (`/etc/caddy/Caddyfile`, or `/usr/local/etc/caddy/Caddyfile` on FreeBSD).
+  It now only ensures `import /opt/xamal/*/Caddyfile` is present, appending
+  it if missing (and inserting a newline first if the file's last existing
+  line didn't already end with one) — any global options block, other
+  sites, or anything else you manage in that file yourself is left
+  untouched. There's no xamal config for a global options block (e.g.
+  `email`) — that's host-wide, not a per-service concern, so it's entirely
+  up to whatever manages the file.
 
 ### Fixed
 

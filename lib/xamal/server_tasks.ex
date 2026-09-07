@@ -71,8 +71,21 @@ defmodule Xamal.ServerTasks do
       caddyfile_cmd = Caddy.write_caddyfile(config, upstream_port)
       SSH.execute_command(host, caddyfile_cmd, ssh_config: config.ssh)
 
-      # Point system Caddyfile to import service Caddyfiles (survives reboot)
-      SSH.execute_command(host, Caddy.configure_system_caddyfile(config), ssh_config: config.ssh)
+      # Ensure the system Caddyfile imports service Caddyfiles (survives
+      # reboot), unless the user manages that file themselves. This only
+      # appends the import line if it's missing — nothing else in the file
+      # is touched.
+      if Configuration.Caddy.manage_system_caddyfile?(config.caddy) do
+        SSH.execute_command(host, Caddy.configure_system_caddyfile(config),
+          ssh_config: config.ssh
+        )
+      else
+        say(
+          "  Skipping system Caddyfile (caddy.manage_system_caddyfile: false) — " <>
+            "make sure your own Caddyfile has `import /opt/xamal/*/Caddyfile`",
+          :yellow
+        )
+      end
 
       # Start/reload Caddy
       SSH.execute_command(host, Caddy.reload(config), ssh_config: config.ssh)
