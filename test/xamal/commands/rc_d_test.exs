@@ -52,6 +52,22 @@ defmodule Xamal.Commands.RcDTest do
       port_index = :binary.match(content, "PORT=4001") |> elem(0)
       assert env_index < port_index
     end
+
+    test "prestart pre-creates the logfile owned by the release user" do
+      # daemon(8) opens the -o logfile while still running as root - if the
+      # file doesn't already exist, it's created root-owned/mode 600, which
+      # locks out both the release user and App.logs/2 (tails as that user,
+      # not root). Pre-creating it here (only if missing, so restarts don't
+      # truncate existing logs) avoids that.
+      content = RcD.generate_script_content(@config, 4000)
+
+      assert content =~
+               ~s([ -e "${logfile}" ] || install -o deploy -g deploy -m 640 /dev/null "${logfile}")
+
+      prestart_index = :binary.match(content, "_prestart()") |> elem(0)
+      logfile_install_index = :binary.match(content, "install -o deploy") |> elem(0)
+      assert prestart_index < logfile_install_index
+    end
   end
 
   describe "install_unit/1" do

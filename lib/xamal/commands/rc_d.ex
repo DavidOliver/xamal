@@ -30,7 +30,12 @@ defmodule Xamal.Commands.RcD do
 
   Output that would go to the systemd journal instead goes to
   `<service_dir>/log/<name>.log` via daemon(8)'s `-o`; see
-  `Xamal.Commands.App.logs/2` for how that's read back.
+  `Xamal.Commands.App.logs/2` for how that's read back. `daemon(8)` opens
+  that file while still running as root (it drops to `-u <user>` only for
+  the *child*), so if the file doesn't already exist it gets created
+  root-owned, mode 600 — unreadable by `<user>` (and so by `App.logs/2`,
+  which tails it as `<user>`, not root). `${name}_prestart()` pre-creates
+  it owned by `<user>` first to avoid that.
   """
 
   import Xamal.Commands.Base
@@ -80,6 +85,7 @@ defmodule Xamal.Commands.RcD do
     #{name}_prestart()
     {
         install -d -o #{user} -g #{user} "/var/run/${name}" "#{service_dir}/log"
+        [ -e "${logfile}" ] || install -o #{user} -g #{user} -m 640 /dev/null "${logfile}"
     }
 
     stop_cmd="${name}_stop"

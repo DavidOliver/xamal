@@ -123,6 +123,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   project that doesn't use one (or either) — e.g. a plain-CSS app with no
   JS bundler — with "The task ... could not be found", not just a
   no-op.
+- FreeBSD: the rc.d `${name}_prestart()` hook now pre-creates
+  `<service_dir>/log/<name>.log` owned by `ssh.user` (mode 640) before
+  `daemon(8)` starts. `daemon(8)` opens its `-o` logfile while still
+  running as root (it only drops to `-u <user>` for the child process), so
+  a first boot left the file root-owned, mode 600 — unreadable by
+  `mix xamal.app.logs`, which tails it as `ssh.user`, not root (surfaced
+  as a silent "(no logs available)" rather than a permission error).
 
 ## [0.4.2]
 
