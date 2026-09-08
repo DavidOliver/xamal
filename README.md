@@ -139,8 +139,8 @@ Run `mix help | grep xamal` to list every available task.
 
 ```
 mix xamal.setup               # Bootstrap servers and deploy
-mix xamal.deploy              # Build, distribute, and boot
-mix xamal.redeploy            # Deploy without bootstrapping
+mix xamal.deploy              # Build, distribute, boot, and prune old releases
+mix xamal.redeploy            # Build, distribute, and boot, without pruning old releases
 mix xamal.rollback VERSION    # Roll back to a previous version
 mix xamal.prune               # Remove old releases, keeping the retained count
 mix xamal.remove              # Remove remote release and proxy resources

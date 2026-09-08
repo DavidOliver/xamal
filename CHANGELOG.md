@@ -103,6 +103,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   back to caddy's own default admin address (`localhost:2019`) — which
   nothing is listening on, since the real admin API is that socket. They
   now set the same `CADDY_ADMIN` themselves on FreeBSD.
+- `mix xamal.redeploy`'s docs (`@moduledoc`/`@shortdoc`, and the README)
+  said "deploy without bootstrapping" — misleading, since `mix xamal.deploy`
+  doesn't bootstrap either (only `mix xamal.setup` does). The only actual
+  difference between `deploy` and `redeploy` is that `redeploy` skips
+  pruning old releases afterward; the docs now say that instead.
 
 ## [0.4.2]
 
