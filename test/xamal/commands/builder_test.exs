@@ -76,15 +76,30 @@ defmodule Xamal.Commands.BuilderTest do
       assert cmd_str =~ "MIX_ENV=prod mix release my_app --overwrite"
     end
 
-    test "runs tailwind/esbuild install under MIX_ENV=prod too" do
-      # Without this, they run under Mix's default :dev env, and since
-      # deps.get --only prod deliberately never fetched :dev/:test-only
-      # deps, Mix refuses to continue ("Unchecked dependencies for
-      # environment dev") the moment any bare `mix <task>` runs next.
+    test "omits tailwind/esbuild install steps when the project has neither dependency" do
+      # `mix <app>.install` is a task defined by the `:tailwind`/`:esbuild`
+      # hex packages themselves - it doesn't exist at all for a project
+      # that doesn't depend on them (e.g. a plain-CSS app with no JS
+      # bundler). Calling it unconditionally breaks that project with
+      # "The task ... could not be found". Xamal's own project (which
+      # these tests run under) has neither dependency, so this exercises
+      # that exact scenario for real - see deps_include?/2 below for the
+      # presence-branch logic.
       cmd_str = @config |> Builder.build_release_remote() |> Enum.join(" ")
 
-      assert cmd_str =~ "MIX_ENV=prod mix tailwind.install --if-missing"
-      assert cmd_str =~ "MIX_ENV=prod mix esbuild.install --if-missing"
+      refute cmd_str =~ "tailwind.install"
+      refute cmd_str =~ "esbuild.install"
+    end
+
+    test "deps_include?/2 detects the presence of an asset tool dependency" do
+      # This is the gate `build_release_remote/1` and `build_in_docker/1`
+      # use to decide whether to include the tailwind/esbuild install
+      # steps (each still MIX_ENV=prod-prefixed like every other step,
+      # per the test above - deps.get, assets.deploy, release).
+      assert Builder.deps_include?([{:tailwind, "~> 0.2"}], :tailwind)
+      assert Builder.deps_include?([{:esbuild, "~> 0.8"}], :esbuild)
+      refute Builder.deps_include?([{:tailwind, "~> 0.2"}], :esbuild)
+      refute Builder.deps_include?([], :tailwind)
     end
   end
 
@@ -136,11 +151,18 @@ defmodule Xamal.Commands.BuilderTest do
       assert cmd_str =~ "mix local.rebar --if-missing --force"
       assert cmd_str =~ "MIX_ENV=prod mix deps.get --only prod"
       assert cmd_str =~ "MIX_ENV=prod mix deps.compile"
-      assert cmd_str =~ "MIX_ENV=prod mix tailwind.install --if-missing"
-      assert cmd_str =~ "MIX_ENV=prod mix esbuild.install --if-missing"
       assert cmd_str =~ "MIX_ENV=prod mix assets.deploy"
       assert cmd_str =~ "MIX_ENV=prod mix release my_app --overwrite"
       assert cmd_str =~ "chown -R"
+    end
+
+    test "omits tailwind/esbuild install steps when the project has neither dependency" do
+      # Same reasoning as build_release_remote/1's equivalent test - xamal's
+      # own project (which these tests run under) has neither dependency.
+      cmd_str = @config |> Builder.build_in_docker() |> Enum.join(" ")
+
+      refute cmd_str =~ "tailwind.install"
+      refute cmd_str =~ "esbuild.install"
     end
 
     test "includes volume flags when configured" do

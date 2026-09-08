@@ -38,10 +38,13 @@ defmodule Xamal.Commands.Builder do
   Build the release on `builder.remote` (source already synced there —
   see `Xamal.BuildTasks`) and create its tarball, in one combined command.
 
-  Mirrors `build_release/1` plus the `mix local.hex`/`local.rebar`/
-  `tailwind.install`/`esbuild.install` `--if-missing` bootstrap steps
-  `build_in_docker/1` uses, since a persistent build host — like a fresh
-  container — isn't guaranteed to already have them.
+  Mirrors `build_release/1` plus the `mix local.hex`/`local.rebar`
+  `--if-missing` bootstrap steps `build_in_docker/1` uses, since a
+  persistent build host — like a fresh container — isn't guaranteed to
+  already have them. `tailwind.install`/`esbuild.install` are included
+  only when the project actually depends on `:tailwind`/`:esbuild` —
+  those Mix tasks don't exist at all otherwise, so calling them
+  unconditionally breaks any project that doesn't use one (or either).
   """
   def build_release_remote(config) do
     release_name = config.release.name
@@ -53,8 +56,8 @@ defmodule Xamal.Commands.Builder do
       ["mix", "local.hex", "--if-missing", "--force"],
       ["mix", "local.rebar", "--if-missing", "--force"],
       ["MIX_ENV=#{mix_env}", "mix", "deps.get", "--only", mix_env],
-      ["MIX_ENV=#{mix_env}", "mix", "tailwind.install", "--if-missing"],
-      ["MIX_ENV=#{mix_env}", "mix", "esbuild.install", "--if-missing"],
+      asset_install_step(:tailwind, mix_env),
+      asset_install_step(:esbuild, mix_env),
       ["MIX_ENV=#{mix_env}", "mix", "assets.deploy"],
       ["MIX_ENV=#{mix_env}", "mix", "release", release_name, "--overwrite"]
     ])
@@ -146,12 +149,13 @@ defmodule Xamal.Commands.Builder do
         "mix local.rebar --if-missing --force",
         "MIX_ENV=#{mix_env} mix deps.get --only #{mix_env}",
         "MIX_ENV=#{mix_env} mix deps.compile",
-        "MIX_ENV=#{mix_env} mix tailwind.install --if-missing",
-        "MIX_ENV=#{mix_env} mix esbuild.install --if-missing",
+        asset_install_step_string(:tailwind, mix_env),
+        asset_install_step_string(:esbuild, mix_env),
         "MIX_ENV=#{mix_env} mix assets.deploy",
         "MIX_ENV=#{mix_env} mix release #{release_name} --overwrite",
         "chown -R $(stat -c '%u:%g' /app) /app/_build /app/deps /app/priv/static"
       ]
+      |> Enum.reject(&is_nil/1)
       |> Enum.join(" && ")
 
     combine([
@@ -175,4 +179,30 @@ defmodule Xamal.Commands.Builder do
       remove_file(tarball)
     ])
   end
+
+  # `mix <app>.install` only exists when `app` is an actual dependency of
+  # the project being built (it's the Mix task the `:tailwind`/`:esbuild`
+  # hex packages themselves define). Calling it unconditionally breaks any
+  # project that doesn't depend on one of them — e.g. plain-CSS apps with
+  # no `:tailwind` dep — with "The task ... could not be found".
+  defp asset_install_step(app, mix_env) do
+    if dependency_present?(app) do
+      ["MIX_ENV=#{mix_env}", "mix", "#{app}.install", "--if-missing"]
+    end
+  end
+
+  defp asset_install_step_string(app, mix_env) do
+    if dependency_present?(app) do
+      "MIX_ENV=#{mix_env} mix #{app}.install --if-missing"
+    end
+  end
+
+  defp dependency_present?(app) do
+    Mix.Project.config()
+    |> Keyword.get(:deps, [])
+    |> deps_include?(app)
+  end
+
+  @doc false
+  def deps_include?(deps, app), do: Enum.any?(deps, &(elem(&1, 0) == app))
 end

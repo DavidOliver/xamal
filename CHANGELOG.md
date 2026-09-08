@@ -116,6 +116,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   deps, Mix refused to continue the moment either ran ("Unchecked
   dependencies for environment dev") — a real, reproducible failure for any
   project with dev/test-only deps, not a hypothetical.
+- `Builder.build_release_remote/1` and `build_in_docker/1` now only run
+  `mix tailwind.install`/`mix esbuild.install` when the project actually
+  depends on `:tailwind`/`:esbuild`. Those Mix tasks are defined by the
+  hex packages themselves, so calling them unconditionally broke any
+  project that doesn't use one (or either) — e.g. a plain-CSS app with no
+  JS bundler — with "The task ... could not be found", not just a
+  no-op.
 
 ## [0.4.2]
 
