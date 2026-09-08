@@ -72,10 +72,19 @@ defmodule Xamal.Commands.BuilderTest do
       assert cmd_str =~ "mix local.hex --if-missing --force"
       assert cmd_str =~ "mix local.rebar --if-missing --force"
       assert cmd_str =~ "MIX_ENV=prod mix deps.get --only prod"
-      assert cmd_str =~ "mix tailwind.install --if-missing"
-      assert cmd_str =~ "mix esbuild.install --if-missing"
       assert cmd_str =~ "MIX_ENV=prod mix assets.deploy"
       assert cmd_str =~ "MIX_ENV=prod mix release my_app --overwrite"
+    end
+
+    test "runs tailwind/esbuild install under MIX_ENV=prod too" do
+      # Without this, they run under Mix's default :dev env, and since
+      # deps.get --only prod deliberately never fetched :dev/:test-only
+      # deps, Mix refuses to continue ("Unchecked dependencies for
+      # environment dev") the moment any bare `mix <task>` runs next.
+      cmd_str = @config |> Builder.build_release_remote() |> Enum.join(" ")
+
+      assert cmd_str =~ "MIX_ENV=prod mix tailwind.install --if-missing"
+      assert cmd_str =~ "MIX_ENV=prod mix esbuild.install --if-missing"
     end
   end
 
@@ -127,8 +136,8 @@ defmodule Xamal.Commands.BuilderTest do
       assert cmd_str =~ "mix local.rebar --if-missing --force"
       assert cmd_str =~ "MIX_ENV=prod mix deps.get --only prod"
       assert cmd_str =~ "MIX_ENV=prod mix deps.compile"
-      assert cmd_str =~ "mix tailwind.install --if-missing"
-      assert cmd_str =~ "mix esbuild.install --if-missing"
+      assert cmd_str =~ "MIX_ENV=prod mix tailwind.install --if-missing"
+      assert cmd_str =~ "MIX_ENV=prod mix esbuild.install --if-missing"
       assert cmd_str =~ "MIX_ENV=prod mix assets.deploy"
       assert cmd_str =~ "MIX_ENV=prod mix release my_app --overwrite"
       assert cmd_str =~ "chown -R"

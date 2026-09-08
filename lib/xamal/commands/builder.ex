@@ -53,8 +53,8 @@ defmodule Xamal.Commands.Builder do
       ["mix", "local.hex", "--if-missing", "--force"],
       ["mix", "local.rebar", "--if-missing", "--force"],
       ["MIX_ENV=#{mix_env}", "mix", "deps.get", "--only", mix_env],
-      ["mix", "tailwind.install", "--if-missing"],
-      ["mix", "esbuild.install", "--if-missing"],
+      ["MIX_ENV=#{mix_env}", "mix", "tailwind.install", "--if-missing"],
+      ["MIX_ENV=#{mix_env}", "mix", "esbuild.install", "--if-missing"],
       ["MIX_ENV=#{mix_env}", "mix", "assets.deploy"],
       ["MIX_ENV=#{mix_env}", "mix", "release", release_name, "--overwrite"]
     ])
@@ -146,8 +146,8 @@ defmodule Xamal.Commands.Builder do
         "mix local.rebar --if-missing --force",
         "MIX_ENV=#{mix_env} mix deps.get --only #{mix_env}",
         "MIX_ENV=#{mix_env} mix deps.compile",
-        "mix tailwind.install --if-missing",
-        "mix esbuild.install --if-missing",
+        "MIX_ENV=#{mix_env} mix tailwind.install --if-missing",
+        "MIX_ENV=#{mix_env} mix esbuild.install --if-missing",
         "MIX_ENV=#{mix_env} mix assets.deploy",
         "MIX_ENV=#{mix_env} mix release #{release_name} --overwrite",
         "chown -R $(stat -c '%u:%g' /app) /app/_build /app/deps /app/priv/static"

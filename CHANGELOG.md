@@ -108,6 +108,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   doesn't bootstrap either (only `mix xamal.setup` does). The only actual
   difference between `deploy` and `redeploy` is that `redeploy` skips
   pruning old releases afterward; the docs now say that instead.
+- `Builder.build_release_remote/1` (`builder.remote`) and `build_in_docker/1`
+  (`builder.docker`) now run `mix tailwind.install`/`mix esbuild.install`
+  under `MIX_ENV=prod`, like every other step in the same build. Without it
+  they ran under Mix's default `:dev` env, and since the preceding
+  `deps.get --only prod` deliberately never fetched `:dev`/`:test`-only
+  deps, Mix refused to continue the moment either ran ("Unchecked
+  dependencies for environment dev") — a real, reproducible failure for any
+  project with dev/test-only deps, not a hypothetical.
 
 ## [0.4.2]
 
