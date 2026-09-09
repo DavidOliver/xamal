@@ -290,6 +290,12 @@ defmodule Xamal.AppTasks do
 
     ssh_exec!(host, CommandBase.make_directory(Path.dirname(env_path)), config)
     ssh_exec!(host, CommandBase.write([["echo", "'#{env_content}'"], [env_path]]), config)
+    # Owner-only: this holds secrets (SECRET_KEY_BASE, etc.). Readable as-is
+    # by ssh.user (who wrote it, and who reads it back for mix xamal.exec/
+    # migrate) and by root when systemd/rc.d source it at boot to build the
+    # environment for release.run_as - see Commands.Systemd/RcD moduledocs -
+    # so run_as itself never needs, and doesn't get, direct read access.
+    ssh_exec!(host, ["chmod", "600", env_path], config)
     ssh_exec!(host, Service.write_env_symlink(config, role), config)
   end
 end

@@ -139,6 +139,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `mix xamal.app.logs`, which tails it as `ssh.user`, not root (surfaced
   as a silent "(no logs available)" rather than a permission error).
 
+### Security
+
+- The uploaded env file (`env/roles/<role>.env`, holding secrets like
+  `SECRET_KEY_BASE`) is now `chmod 600` right after writing, instead of
+  whatever the default umask left it as (typically world-readable). Both
+  systemd and rc.d/`daemon(8)` read it as root, before dropping to
+  `release.run_as`, to build the release's environment — so tightening
+  this to owner-only doesn't affect the running release either way, on
+  either backend.
+
 ## [0.4.2]
 
 ### Fixed
