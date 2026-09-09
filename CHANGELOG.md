@@ -145,6 +145,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a first boot left the file root-owned, mode 600 — unreadable by
   `mix xamal.app.logs`, which tails it as `ssh.user`, not root (surfaced
   as a silent "(no logs available)" rather than a permission error).
+- `mix xamal.remove` now removes the service directory via `become`.
+  `shared_directory/1`'s per-port subdirectories are `run_as`-owned (see
+  above), so a plain `rm -r` as `ssh.user` could fail partway through
+  whenever `run_as` differs from `ssh.user` — `ssh.user` can delete the
+  now-empty subdirectory *entries* (it owns the parent), but not
+  necessarily their *contents* first.
 
 ### Security
 

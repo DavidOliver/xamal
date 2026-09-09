@@ -34,9 +34,14 @@ defmodule Xamal.Commands.Server do
 
   @doc """
   Remove the entire service directory.
+
+  Needs `become`: `Configuration.shared_directory/1` (under here) contains
+  per-port subdirectories owned by `run_as_user/1`, not `ssh.user` - see
+  `Xamal.Commands.RcD`/`Xamal.Commands.Systemd` - which `ssh.user` can't
+  necessarily recurse into and delete on its own when the two differ.
   """
   def remove_service_directory(config) do
-    remove_directory(Configuration.service_directory(config))
+    [config.ssh.become | remove_directory(Configuration.service_directory(config))]
   end
 
   @doc """

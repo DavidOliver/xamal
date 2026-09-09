@@ -58,4 +58,17 @@ defmodule Xamal.Commands.ServerTest do
       assert cmd == ["ls", "-1", "/opt/xamal/my-app/releases"]
     end
   end
+
+  describe "remove_service_directory/1" do
+    test "uses ssh.become - shared_directory can contain run_as-owned subdirs" do
+      cmd = Server.remove_service_directory(@config)
+      assert cmd == ["sudo", "rm", "-r", "/opt/xamal/my-app"]
+    end
+
+    test "uses ssh.become for privilege escalation (e.g. doas on FreeBSD)" do
+      config = %{@config | ssh: %Xamal.Configuration.Ssh{become: "doas"}}
+      cmd = Server.remove_service_directory(config)
+      assert cmd == ["doas", "rm", "-r", "/opt/xamal/my-app"]
+    end
+  end
 end
