@@ -71,6 +71,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   network-facing release process has no business inheriting that, so this
   lets it run under a distinct, unprivileged account instead. See
   `Xamal.Configuration.run_as_user/1`.
+- `Xamal.Configuration.shared_directory/1` (`<service_dir>/shared`) is now
+  wired up: each port instance gets its own `run_as`-owned subdirectory
+  under it (`shared/<port>`), with `RELEASE_TMP` and Erlang's
+  `ERL_CRASH_DUMP` pointed there on both systemd and rc.d. Everything else
+  under `service_dir` (the release itself, env files, logs) is
+  `ssh.user`-owned and not writable by `run_as` — this is the one place
+  the running release can actually write to.
 
 ### Changed
 

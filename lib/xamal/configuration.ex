@@ -228,6 +228,15 @@ defmodule Xamal.Configuration do
     "#{service_directory(config)}/env"
   end
 
+  @doc """
+  The one directory under `service_directory/1` writable by `run_as_user/1`
+  rather than `ssh.user` — everything else (the release itself, env files,
+  logs) is deploy-account-owned and read-only to the running release. Each
+  port instance gets its own subdirectory (`<shared_directory>/<port>`,
+  see `Xamal.Commands.RcD`/`Xamal.Commands.Systemd`) so blue-green's two
+  simultaneously-running instances can't collide, used for `RELEASE_TMP`
+  and Erlang's `erl_crash.dump`.
+  """
   def shared_directory(%__MODULE__{} = config) do
     "#{service_directory(config)}/shared"
   end

@@ -98,6 +98,25 @@ defmodule Xamal.Commands.RcDTest do
       assert content =~
                ~s([ -e "${logfile}" ] || install -o deploy -g deploy -m 640 /dev/null "${logfile}")
     end
+
+    test "prestart creates a run_as-owned, per-port scratch dir under shared_directory" do
+      # The release itself needs somewhere writable - RELEASE_TMP, Erlang's
+      # erl_crash.dump - everything else under service_dir is ssh.user-owned
+      # (see this module's moduledoc). Per-port so blue-green's two
+      # simultaneously-running instances can't collide.
+      config = %{@config | release: %{@config.release | run_as: "app"}}
+      content = RcD.generate_script_content(config, 4000)
+
+      assert content =~ ~s(install -d -o app -g app "/opt/xamal/my-app/shared/4000")
+    end
+
+    test "exports RELEASE_TMP and ERL_CRASH_DUMP pointing at that scratch dir" do
+      content = RcD.generate_script_content(@config, 4001)
+
+      assert content =~ "RELEASE_TMP=/opt/xamal/my-app/shared/4001"
+      assert content =~ "ERL_CRASH_DUMP=/opt/xamal/my-app/shared/4001/erl_crash.dump"
+      assert content =~ "export PORT RELEASE_NODE RELEASE_TMP ERL_CRASH_DUMP"
+    end
   end
 
   describe "install_unit/1" do

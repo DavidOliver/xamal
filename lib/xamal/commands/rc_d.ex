@@ -44,6 +44,13 @@ defmodule Xamal.Commands.RcD do
   is the `-u` target and owns `/var/run/<name>` (the pidfile directory),
   kept in lockstep since that's what daemon(8) actually needs write access
   to under its dropped-privilege identity.
+
+  Everything else under `<service_dir>` (`current`, `releases`, `env`, the
+  deploy pipeline in general) is `ssh.user`-owned and not writable by
+  `run_as` — see `Xamal.Configuration.shared_directory/1` for the one
+  exception, a `run_as`-owned, per-port scratch directory for things the
+  running release itself needs to write (`RELEASE_TMP`, Erlang's
+  `erl_crash.dump`).
   """
 
   import Xamal.Commands.Base
@@ -67,6 +74,7 @@ defmodule Xamal.Commands.RcD do
     name = instance_name(config, port)
     bin = "#{service_dir}/current/bin/#{release_name}"
     env_file = "#{Configuration.env_directory(config)}/app.env"
+    run_dir = "#{Configuration.shared_directory(config)}/#{port}"
 
     """
     #!/bin/sh
@@ -96,6 +104,7 @@ defmodule Xamal.Commands.RcD do
         install -d -o #{run_user} -g #{run_user} "/var/run/${name}"
         install -d -o #{deploy_user} -g #{deploy_user} "#{service_dir}/log"
         [ -e "${logfile}" ] || install -o #{deploy_user} -g #{deploy_user} -m 640 /dev/null "${logfile}"
+        install -d -o #{run_user} -g #{run_user} "#{run_dir}"
     }
 
     stop_cmd="${name}_stop"
@@ -127,7 +136,9 @@ defmodule Xamal.Commands.RcD do
 
     PORT=#{port}
     RELEASE_NODE=#{release_name}_#{port}
-    export PORT RELEASE_NODE
+    RELEASE_TMP=#{run_dir}
+    ERL_CRASH_DUMP=#{run_dir}/erl_crash.dump
+    export PORT RELEASE_NODE RELEASE_TMP ERL_CRASH_DUMP
 
     run_rc_command "$1"
     """
