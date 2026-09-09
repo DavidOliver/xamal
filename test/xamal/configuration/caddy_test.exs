@@ -100,6 +100,50 @@ defmodule Xamal.Configuration.CaddyTest do
 
       assert caddyfile =~ ":80"
     end
+
+    test "extra_config is spliced before reverse_proxy" do
+      caddy = Caddy.new(%{"host" => "app.example.com", "extra_config" => "encode gzip"})
+      caddyfile = Caddy.generate_caddyfile(caddy, 4000)
+
+      assert caddyfile =~ "encode gzip"
+      assert caddyfile =~ "reverse_proxy localhost:4000"
+    end
+
+    test "reverse_proxy_config is spliced inside the reverse_proxy block" do
+      caddy =
+        Caddy.new(%{"host" => "app.example.com", "reverse_proxy_config" => "health_uri /"})
+
+      caddyfile = Caddy.generate_caddyfile(caddy, 4000)
+
+      assert caddyfile =~ "reverse_proxy localhost:4000 {"
+      assert caddyfile =~ "health_uri /"
+      assert caddyfile =~ ~r/reverse_proxy localhost:4000 \{\s*health_uri \/\s*\}/
+    end
+
+    test "reverse_proxy_config still uses the given upstream_port (blue-green safety)" do
+      caddy =
+        Caddy.new(%{"host" => "app.example.com", "reverse_proxy_config" => "health_uri /"})
+
+      caddyfile = Caddy.generate_caddyfile(caddy, 4001)
+
+      assert caddyfile =~ "reverse_proxy localhost:4001 {"
+      refute caddyfile =~ "localhost:4000"
+    end
+
+    test "extra_config and reverse_proxy_config combine" do
+      caddy =
+        Caddy.new(%{
+          "host" => "app.example.com",
+          "extra_config" => "header {\n    -Server\n}",
+          "reverse_proxy_config" => "health_uri /"
+        })
+
+      caddyfile = Caddy.generate_caddyfile(caddy, 4000)
+
+      assert caddyfile =~ "-Server"
+      assert caddyfile =~ "reverse_proxy localhost:4000 {"
+      assert caddyfile =~ "health_uri /"
+    end
   end
 
   describe "maintenance_caddyfile/1" do

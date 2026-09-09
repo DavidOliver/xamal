@@ -6,6 +6,16 @@ defmodule Xamal.Configuration.Caddy do
   alongside `reverse_proxy` — the escape hatch for anything xamal doesn't
   model directly (request blocking by header/path, custom matchers, etc.).
 
+  `reverse_proxy_config` is raw Caddyfile text spliced *inside* the
+  generated `reverse_proxy` directive's block (e.g. `health_uri`,
+  `header_up`, `transport http { ... }`). It exists separately from
+  `extra_config` because the upstream port in `reverse_proxy
+  localhost:<port>` alternates between `app_port` and `app_port + 1` across
+  blue-green deploys — writing your own `reverse_proxy` inside
+  `extra_config` would mean hardcoding a port and silently breaking that
+  swap. `reverse_proxy_config` keeps xamal in charge of the port while
+  still letting you configure the directive.
+
   `manage_system_caddyfile` (default `true`) controls whether
   `mix xamal.server.bootstrap` ensures the system Caddyfile imports service
   Caddyfiles (`import /opt/xamal/*/Caddyfile`, appended only if missing —
@@ -32,6 +42,7 @@ defmodule Xamal.Configuration.Caddy do
     :app_port,
     :ssl,
     :extra_config,
+    :reverse_proxy_config,
     :manage_system_caddyfile,
     :admin
   ]
@@ -43,6 +54,7 @@ defmodule Xamal.Configuration.Caddy do
       app_port: Map.get(config, "app_port", 4000),
       ssl: Map.get(config, "ssl", true),
       extra_config: Map.get(config, "extra_config"),
+      reverse_proxy_config: Map.get(config, "reverse_proxy_config"),
       manage_system_caddyfile: Map.get(config, "manage_system_caddyfile", true),
       admin: Map.get(config, "admin")
     }
@@ -90,11 +102,26 @@ defmodule Xamal.Configuration.Caddy do
     caddyfile_block(caddy, ~s(respond "Service under maintenance" 503))
   end
 
-  defp site_directives(%__MODULE__{extra_config: extra}, upstream_port) when is_binary(extra) do
-    "#{String.trim(extra)}\n    reverse_proxy localhost:#{upstream_port}"
+  defp site_directives(%__MODULE__{extra_config: extra} = caddy, upstream_port) do
+    reverse_proxy = reverse_proxy_directive(caddy, upstream_port)
+
+    case extra do
+      extra when is_binary(extra) -> "#{String.trim(extra)}\n    #{reverse_proxy}"
+      _ -> reverse_proxy
+    end
   end
 
-  defp site_directives(%__MODULE__{}, upstream_port) do
+  defp reverse_proxy_directive(%__MODULE__{reverse_proxy_config: rp}, upstream_port)
+       when is_binary(rp) do
+    """
+    reverse_proxy localhost:#{upstream_port} {
+        #{String.trim(rp)}
+    }
+    """
+    |> String.trim()
+  end
+
+  defp reverse_proxy_directive(%__MODULE__{}, upstream_port) do
     "reverse_proxy localhost:#{upstream_port}"
   end
 
