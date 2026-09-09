@@ -48,6 +48,19 @@ defmodule Xamal.Commands.SystemdTest do
       content = Systemd.generate_unit_content(@config)
       assert content =~ "Type=exec"
     end
+
+    test "User= defaults to ssh.user when release.run_as is unset" do
+      content = Systemd.generate_unit_content(@config)
+      assert content =~ "User=deploy"
+    end
+
+    test "User= is release.run_as when set, distinct from ssh.user" do
+      config = %{@config | release: %{@config.release | run_as: "app"}}
+      content = Systemd.generate_unit_content(config)
+
+      assert content =~ "User=app"
+      refute content =~ "User=deploy"
+    end
   end
 
   describe "install_unit/1" do

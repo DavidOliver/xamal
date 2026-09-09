@@ -5,6 +5,13 @@ defmodule Xamal.Commands.Systemd do
   Uses template units (`<release>@.service`) with the port as instance identifier,
   enabling blue-green deploys (`myapp@4000` / `myapp@4001`), crash recovery via
   `Restart=on-failure`, and boot-time startup via `systemctl enable`.
+
+  `User=` is `Xamal.Configuration.run_as_user/1` (`release.run_as`, else
+  `ssh.user`) — the account the release *process* runs as, which need not
+  be `ssh.user` (the deploy/admin account). `EnvironmentFile=` is read by
+  systemd itself (as root, before it switches to `User=` to exec the
+  release), so that file's permissions only need to allow `ssh.user` (who
+  writes it) to read it back — not `User=`.
   """
 
   import Xamal.Commands.Base
@@ -21,7 +28,7 @@ defmodule Xamal.Commands.Systemd do
   def generate_unit_content(config) do
     release_name = config.release.name
     service_dir = Configuration.service_directory(config)
-    user = config.ssh.user
+    user = Configuration.run_as_user(config)
     drain_timeout = Configuration.drain_timeout(config)
 
     """
