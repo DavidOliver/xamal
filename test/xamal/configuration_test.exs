@@ -107,6 +107,19 @@ defmodule Xamal.ConfigurationTest do
       assert Configuration.current_link(config) == "/opt/xamal/my-app/current"
       assert Configuration.build_directory(config) == "~/.xamal/builds/my-app"
     end
+
+    test "run_as_user defaults to ssh.user when release.run_as is unset" do
+      config = Configuration.new(@valid_config)
+      assert Configuration.run_as_user(config) == "deploy"
+    end
+
+    test "run_as_user uses release.run_as when set, distinct from ssh.user" do
+      config =
+        Configuration.new(Map.put(@valid_config, "release", %{"run_as" => "app"}))
+
+      assert Configuration.run_as_user(config) == "app"
+      assert config.ssh.user == "deploy"
+    end
   end
 
   describe "validation" do

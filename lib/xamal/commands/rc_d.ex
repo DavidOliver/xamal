@@ -31,11 +31,19 @@ defmodule Xamal.Commands.RcD do
   Output that would go to the systemd journal instead goes to
   `<service_dir>/log/<name>.log` via daemon(8)'s `-o`; see
   `Xamal.Commands.App.logs/2` for how that's read back. `daemon(8)` opens
-  that file while still running as root (it drops to `-u <user>` only for
-  the *child*), so if the file doesn't already exist it gets created
-  root-owned, mode 600 — unreadable by `<user>` (and so by `App.logs/2`,
-  which tails it as `<user>`, not root). `${name}_prestart()` pre-creates
-  it owned by `<user>` first to avoid that.
+  that file while still running as root (it only drops to `-u <run_as>`
+  for the *child* it forks+execs, not itself), so if the file doesn't
+  already exist it gets created root-owned, mode 600 — unreadable by
+  `ssh.user` (and so by `App.logs/2`, which tails it as `ssh.user`, not
+  root). `${name}_prestart()` pre-creates it owned by `ssh.user` first to
+  avoid that; deliberately `ssh.user`, not `run_as` — whoever reads logs
+  back is `ssh.user`, and daemon(8) opening it as root doesn't care who
+  it's pre-owned by either way.
+
+  `run_as` (`Xamal.Configuration.Release.run_as`, defaults to `ssh.user`)
+  is the `-u` target and owns `/var/run/<name>` (the pidfile directory),
+  kept in lockstep since that's what daemon(8) actually needs write access
+  to under its dropped-privilege identity.
   """
 
   import Xamal.Commands.Base
@@ -53,7 +61,8 @@ defmodule Xamal.Commands.RcD do
   def generate_script_content(config, port) do
     release_name = config.release.name
     service_dir = Configuration.service_directory(config)
-    user = config.ssh.user
+    deploy_user = config.ssh.user
+    run_user = Configuration.run_as_user(config)
     drain_timeout = Configuration.drain_timeout(config)
     name = instance_name(config, port)
     bin = "#{service_dir}/current/bin/#{release_name}"
@@ -79,13 +88,14 @@ defmodule Xamal.Commands.RcD do
     logfile="#{service_dir}/log/${name}.log"
 
     command="/usr/sbin/daemon"
-    command_args="-P ${pidfile} -p ${child_pidfile} -R #{@restart_delay} -f -o ${logfile} -t ${name} -u #{user} #{bin} start"
+    command_args="-P ${pidfile} -p ${child_pidfile} -R #{@restart_delay} -f -o ${logfile} -t ${name} -u #{run_user} #{bin} start"
 
     start_precmd="${name}_prestart"
     #{name}_prestart()
     {
-        install -d -o #{user} -g #{user} "/var/run/${name}" "#{service_dir}/log"
-        [ -e "${logfile}" ] || install -o #{user} -g #{user} -m 640 /dev/null "${logfile}"
+        install -d -o #{run_user} -g #{run_user} "/var/run/${name}"
+        install -d -o #{deploy_user} -g #{deploy_user} "#{service_dir}/log"
+        [ -e "${logfile}" ] || install -o #{deploy_user} -g #{deploy_user} -m 640 /dev/null "${logfile}"
     }
 
     stop_cmd="${name}_stop"

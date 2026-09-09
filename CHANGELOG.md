@@ -63,6 +63,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   something's changed the real admin address (a customized `caddy_admin` in
   `rc.conf`, a hand-written `admin` block in a Caddyfile outside xamal's
   control). See `mix xamal.docs caddy`.
+- `release: [run_as: "..."]` — the OS account the release *process* runs
+  as (systemd's `User=`, or the FreeBSD `daemon(8) -u` target), separate
+  from `ssh.user` (who deploys/administers the host). Defaults to
+  `ssh.user`, matching xamal's original one-account behavior. `ssh.user`
+  typically has passwordless root via `become` for provisioning — a
+  network-facing release process has no business inheriting that, so this
+  lets it run under a distinct, unprivileged account instead. See
+  `Xamal.Configuration.run_as_user/1`.
 
 ### Changed
 

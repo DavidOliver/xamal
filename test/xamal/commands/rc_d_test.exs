@@ -53,12 +53,14 @@ defmodule Xamal.Commands.RcDTest do
       assert env_index < port_index
     end
 
-    test "prestart pre-creates the logfile owned by the release user" do
+    test "prestart pre-creates the logfile owned by ssh.user, not root" do
       # daemon(8) opens the -o logfile while still running as root - if the
       # file doesn't already exist, it's created root-owned/mode 600, which
-      # locks out both the release user and App.logs/2 (tails as that user,
-      # not root). Pre-creating it here (only if missing, so restarts don't
-      # truncate existing logs) avoids that.
+      # locks out both ssh.user and App.logs/2 (tails as ssh.user, not
+      # root). Pre-creating it here (only if missing, so restarts don't
+      # truncate existing logs) avoids that. Deliberately ssh.user, not
+      # run_as: it's who reads logs back, and daemon(8) opening it as root
+      # doesn't care who it's pre-owned by either way.
       content = RcD.generate_script_content(@config, 4000)
 
       assert content =~
@@ -67,6 +69,34 @@ defmodule Xamal.Commands.RcDTest do
       prestart_index = :binary.match(content, "_prestart()") |> elem(0)
       logfile_install_index = :binary.match(content, "install -o deploy") |> elem(0)
       assert prestart_index < logfile_install_index
+    end
+
+    test "-u defaults to ssh.user when release.run_as is unset" do
+      content = RcD.generate_script_content(@config, 4000)
+      assert content =~ "-u deploy"
+    end
+
+    test "-u is release.run_as when set, and the pidfile dir is owned by it" do
+      config = %{@config | release: %{@config.release | run_as: "app"}}
+      content = RcD.generate_script_content(config, 4000)
+
+      assert content =~ "-u app"
+      refute content =~ "-u deploy"
+      assert content =~ ~s(install -d -o app -g app "/var/run/${name}")
+    end
+
+    test "the log directory and logfile stay owned by ssh.user even when run_as differs" do
+      # ssh.user is who reads logs back (mix xamal.app.logs); run_as (the
+      # release process) never needs direct file access to them - see
+      # Commands.App.logs/2 and this module's moduledoc.
+      config = %{@config | release: %{@config.release | run_as: "app"}}
+      content = RcD.generate_script_content(config, 4000)
+
+      assert content =~
+               ~s(install -d -o deploy -g deploy "#{Xamal.Configuration.service_directory(config)}/log")
+
+      assert content =~
+               ~s([ -e "${logfile}" ] || install -o deploy -g deploy -m 640 /dev/null "${logfile}")
     end
   end
 

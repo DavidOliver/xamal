@@ -172,6 +172,14 @@ defmodule Xamal.Configuration do
 
   def primary_role_name(%__MODULE__{raw_config: raw}), do: Map.get(raw, "primary_role", "web")
 
+  @doc """
+  The OS account the release process itself runs as — `release.run_as` if
+  set, else `ssh.user` (xamal's original, one-account-does-everything
+  behavior). See `Xamal.Configuration.Release` for why you'd set it.
+  """
+  def run_as_user(%__MODULE__{release: %{run_as: run_as}}) when is_binary(run_as), do: run_as
+  def run_as_user(%__MODULE__{ssh: ssh}), do: ssh.user
+
   def primary_role(%__MODULE__{} = config) do
     name = primary_role_name(config)
     Enum.find(config.roles, fn role -> role.name == name end)
