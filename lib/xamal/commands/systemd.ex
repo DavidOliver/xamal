@@ -12,6 +12,12 @@ defmodule Xamal.Commands.Systemd do
   systemd itself (as root, before it switches to `User=` to exec the
   release), so that file's permissions only need to allow `ssh.user` (who
   writes it) to read it back — not `User=`.
+
+  Everything under `service_dir` is `ssh.user`-owned and not writable by
+  `User=`, except `Xamal.Configuration.shared_directory/1` — the `+`
+  prefix on `ExecStartPre` runs just that command as root (regardless of
+  `User=`) to create+chown a `User=`-owned, per-instance subdirectory of
+  it, used for `RELEASE_TMP`/`erl_crash.dump`.
   """
 
   import Xamal.Commands.Base
@@ -30,6 +36,7 @@ defmodule Xamal.Commands.Systemd do
     service_dir = Configuration.service_directory(config)
     user = Configuration.run_as_user(config)
     drain_timeout = Configuration.drain_timeout(config)
+    run_dir = "#{Configuration.shared_directory(config)}/%i"
 
     """
     [Unit]
@@ -41,8 +48,11 @@ defmodule Xamal.Commands.Systemd do
     User=#{user}
     WorkingDirectory=#{service_dir}/current
     EnvironmentFile=-#{service_dir}/env/app.env
+    ExecStartPre=+/usr/bin/install -d -o #{user} -g #{user} #{run_dir}
     Environment=PORT=%i
     Environment=RELEASE_NODE=#{release_name}_%i
+    Environment=RELEASE_TMP=#{run_dir}
+    Environment=ERL_CRASH_DUMP=#{run_dir}/erl_crash.dump
     ExecStart=#{service_dir}/current/bin/#{release_name} start
     Restart=on-failure
     RestartSec=5

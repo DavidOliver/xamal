@@ -61,6 +61,25 @@ defmodule Xamal.Commands.SystemdTest do
       assert content =~ "User=app"
       refute content =~ "User=deploy"
     end
+
+    test "ExecStartPre creates a User=-owned, per-instance scratch dir under shared_directory, as root" do
+      # The + prefix runs this one command as root regardless of User=, so
+      # it can chown to User= - everything else under service_dir is
+      # ssh.user-owned and not writable by User= (see this module's
+      # moduledoc).
+      config = %{@config | release: %{@config.release | run_as: "app"}}
+      content = Systemd.generate_unit_content(config)
+
+      assert content =~
+               "ExecStartPre=+/usr/bin/install -d -o app -g app /opt/xamal/my-app/shared/%i"
+    end
+
+    test "exports RELEASE_TMP and ERL_CRASH_DUMP pointing at that scratch dir" do
+      content = Systemd.generate_unit_content(@config)
+
+      assert content =~ "Environment=RELEASE_TMP=/opt/xamal/my-app/shared/%i"
+      assert content =~ "Environment=ERL_CRASH_DUMP=/opt/xamal/my-app/shared/%i/erl_crash.dump"
+    end
   end
 
   describe "install_unit/1" do
