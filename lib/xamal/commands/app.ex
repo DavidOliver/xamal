@@ -83,11 +83,28 @@ defmodule Xamal.Commands.App do
 
   @doc """
   Get the running release version by reading the current symlink.
+
+  Prints a version only when `current` resolves to an existing directory
+  sitting directly under the releases directory. A missing link, a dangling
+  one, or one pointing anywhere else exits non-zero, which callers see as
+  `{:error, _}` and report as an unknown version.
+
+  Those checks matter because `readlink -f` *canonicalizes* a dangling link
+  rather than failing on it. Without them, a `current` left pointing at
+  `<releases>/releases` (as an interrupted deploy can leave it) reports the
+  version "releases", and `Xamal.BlueGreen`'s failed-boot rollback feeds that
+  straight back into `Xamal.Commands.Server.link_current/2` — recreating the
+  same broken link on every deploy that fails its health check.
   """
   def current_version(config) do
-    pipe([
-      ["readlink", "-f", Configuration.current_link(config)],
-      ["xargs", "basename"]
+    current = Configuration.current_link(config)
+    releases_dir = Configuration.releases_directory(config)
+
+    combine([
+      ["target=$(readlink -f #{current})"],
+      ["test", "-d", "\"$target\""],
+      ["test", "\"$(dirname \"$target\")\"", "=", releases_dir],
+      ["basename", "\"$target\""]
     ])
   end
 

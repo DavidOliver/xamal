@@ -50,6 +50,15 @@ defmodule Xamal.Commands.AppTest do
   end
 
   describe "current_version/1" do
+    setup do
+      dir =
+        Path.join(System.tmp_dir!(), "xamal_current_test_#{:erlang.unique_integer([:positive])}")
+
+      File.mkdir_p!(Path.join(dir, "releases"))
+      on_exit(fn -> File.rm_rf!(dir) end)
+      %{dir: dir}
+    end
+
     test "reads current symlink" do
       cmd = App.current_version(@config)
       cmd_str = Enum.join(cmd, " ")
@@ -57,6 +66,57 @@ defmodule Xamal.Commands.AppTest do
       assert cmd_str =~ "readlink"
       assert cmd_str =~ "current"
       assert cmd_str =~ "basename"
+    end
+
+    test "prints the version a valid current symlink points at", %{dir: dir} do
+      link_current(dir, "releases/abc1234", make: true)
+
+      assert run_current_version(dir) == {:ok, "abc1234"}
+    end
+
+    test "fails when current is missing", %{dir: dir} do
+      assert {:error, _} = run_current_version(dir)
+    end
+
+    test "fails when current is dangling", %{dir: dir} do
+      link_current(dir, "releases/releases")
+
+      assert {:error, _} = run_current_version(dir)
+    end
+
+    test "fails when current points at the releases directory itself", %{dir: dir} do
+      link_current(dir, "releases")
+
+      assert {:error, _} = run_current_version(dir)
+    end
+
+    test "fails when current points outside the releases directory", %{dir: dir} do
+      File.mkdir_p!(Path.join(dir, "elsewhere/abc1234"))
+      link_current(dir, "elsewhere/abc1234")
+
+      assert {:error, _} = run_current_version(dir)
+    end
+
+    defp link_current(dir, target, opts \\ []) do
+      target_path = Path.join(dir, target)
+      if Keyword.get(opts, :make, false), do: File.mkdir_p!(target_path)
+      File.ln_s!(target_path, Path.join(dir, "current"))
+    end
+
+    # The command hard-codes /opt/xamal/<service>; repoint it at a temp tree
+    # so the real shell semantics (readlink -f canonicalizing a dangling
+    # link, in particular) can be exercised without touching /opt.
+    defp run_current_version(dir) do
+      cmd =
+        @config
+        |> App.current_version()
+        |> Enum.join(" ")
+        |> String.replace(Xamal.Configuration.service_directory(@config), dir)
+
+      case System.cmd("sh", ["-c", cmd], stderr_to_stdout: true) do
+        {output, 0} -> {:ok, String.trim(output)}
+        {output, status} -> {:error, {status, String.trim(output)}}
+      end
     end
   end
 

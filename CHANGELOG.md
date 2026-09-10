@@ -151,6 +151,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   whenever `run_as` differs from `ssh.user` — `ssh.user` can delete the
   now-empty subdirectory *entries* (it owns the parent), but not
   necessarily their *contents* first.
+- `Commands.App.current_version/1` no longer reports a version for a
+  `current` symlink that doesn't resolve to a release. `readlink -f`
+  canonicalizes a *dangling* link rather than failing on it, so a `current`
+  left pointing at, say, `<releases>/releases` reported the version
+  "releases" — and `BlueGreen`'s failed-boot rollback fed that straight back
+  into `link_current/2`, recreating the same broken link on every deploy
+  that failed its health check, and leaving `mix xamal.app.*` pointing at a
+  path with no release in it. It now checks that the resolved target is a
+  directory directly under the releases directory and exits non-zero
+  otherwise, which callers already report as an unknown version.
 
 ### Security
 
