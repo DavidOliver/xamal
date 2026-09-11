@@ -90,6 +90,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   untouched. There's no xamal config for a global options block (e.g.
   `email`) — that's host-wide, not a per-service concern, so it's entirely
   up to whatever manages the file.
+- Role env files are uploaded to every host before the `pre-app-boot` hook
+  runs, rather than host by host during the boot itself. A `pre-app-boot`
+  hook that talks to the release it is about to boot - running migrations
+  against the newly distributed version, the usual reason to write one -
+  needs the env file the release reads its configuration from, and on a
+  first deploy to a fresh host nothing had written it yet, so the hook
+  failed. Deploys across several hosts now stage every host env file
+  before booting any of them.
 
 ### Fixed
 

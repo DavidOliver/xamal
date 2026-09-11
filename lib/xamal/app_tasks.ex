@@ -21,6 +21,13 @@ defmodule Xamal.AppTasks do
     config = context.config
     skip_hooks = Keyword.get(opts, :skip_hooks, false)
 
+    # Env files go up before the hook, not inside do_boot_host/5. A
+    # pre-app-boot hook that talks to the release itself - running
+    # migrations against the version just distributed, say - needs the file
+    # the release reads its configuration from, and on a first deploy to a
+    # fresh host nothing has written it yet.
+    Enum.each(Context.roles(context), &upload_role_env_files(&1, config))
+
     run_hook("pre-app-boot", [skip_hooks: skip_hooks], context)
     Enum.each(Context.roles(context), &boot_role(&1, config, skip_hooks, context))
     run_hook("post-app-boot", [skip_hooks: skip_hooks], context)
@@ -258,9 +265,11 @@ defmodule Xamal.AppTasks do
     end
   end
 
-  defp do_boot_host(config, role, host, skip_hooks, context) do
-    upload_env_file(host, config, role)
+  defp upload_role_env_files(role, config) do
+    Enum.each(role.hosts, &upload_env_file(&1, config, role))
+  end
 
+  defp do_boot_host(config, role, host, skip_hooks, context) do
     new_port =
       Xamal.BlueGreen.swap(
         host,
