@@ -3,9 +3,12 @@ defmodule Xamal.HealthCheckTest do
 
   alias Xamal.HealthCheck
 
-  describe "check_command/2" do
+  @config %Xamal.Configuration{raw_config: %{"service" => "my-app"}}
+  @freebsd_config %Xamal.Configuration{raw_config: %{"service" => "my-app", "os" => "freebsd"}}
+
+  describe "check_command/3" do
     test "builds curl command for health check" do
-      cmd = HealthCheck.check_command(4000, "/health")
+      cmd = HealthCheck.check_command(@config, 4000, "/health")
       cmd_str = Enum.join(cmd, " ")
 
       assert cmd_str =~ "curl"
@@ -14,10 +17,27 @@ defmodule Xamal.HealthCheckTest do
     end
 
     test "uses default path" do
-      cmd = HealthCheck.check_command(4001)
+      cmd = HealthCheck.check_command(@config, 4001)
       cmd_str = Enum.join(cmd, " ")
 
       assert cmd_str =~ "/health"
+    end
+
+    test "on freebsd uses fetch, which is in the base system, unlike curl" do
+      cmd = HealthCheck.check_command(@freebsd_config, 4000, "/health")
+      cmd_str = Enum.join(cmd, " ")
+
+      assert cmd_str =~ "fetch"
+      refute cmd_str =~ "curl"
+      assert cmd_str =~ "http://localhost:4000/health"
+    end
+
+    test "on freebsd reports 200 only when the request succeeds" do
+      # fetch cannot print a status code, and do_poll_remote/5 matches on
+      # exactly "200", so the echo has to be gated on fetch's exit status.
+      cmd_str = @freebsd_config |> HealthCheck.check_command(4000) |> Enum.join(" ")
+
+      assert cmd_str =~ ~r/fetch .* && echo 200$/
     end
   end
 
