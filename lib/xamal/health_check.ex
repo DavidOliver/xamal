@@ -5,6 +5,8 @@ defmodule Xamal.HealthCheck do
   Polls a health check endpoint until it returns 200, or times out.
   """
 
+  alias Xamal.Configuration
+
   @doc """
   Poll a health check endpoint until it returns 200.
 
@@ -26,11 +28,24 @@ defmodule Xamal.HealthCheck do
   end
 
   @doc """
-  Check health via SSH by curling from the remote server.
+  Check health by requesting the endpoint from the remote server itself.
   Returns a command that can be executed remotely.
   """
-  def check_command(port, path \\ "/health") do
-    ["curl", "-sf", "-o", "/dev/null", "-w", "%{http_code}", url("localhost", port, path)]
+  def check_command(config, port, path \\ "/health") do
+    url = url("localhost", port, path)
+
+    if Configuration.freebsd?(config) do
+      # curl is not in FreeBSD's base system. On a host that has never had
+      # it installed every poll fails with "command not found", which is
+      # indistinguishable here from an app that never became healthy: the
+      # blue-green swap times out and rolls back a release that was fine.
+      # fetch(1) is in base. It cannot report a status code, so map its exit
+      # status - non-zero on any HTTP error - onto the "200" that
+      # do_poll_remote/5 compares against.
+      ["fetch", "-q", "-o", "/dev/null", url, "&&", "echo", "200"]
+    else
+      ["curl", "-sf", "-o", "/dev/null", "-w", "%{http_code}", url]
+    end
   end
 
   @doc """
@@ -43,7 +58,7 @@ defmodule Xamal.HealthCheck do
     ssh_config = config.ssh
 
     deadline = System.monotonic_time(:second) + timeout
-    cmd = check_command(port, path)
+    cmd = check_command(config, port, path)
 
     do_poll_remote(host, cmd, ssh_config, interval, deadline)
   end

@@ -169,6 +169,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   path with no release in it. It now checks that the resolved target is a
   directory directly under the releases directory and exits non-zero
   otherwise, which callers already report as an unknown version.
+- The remote health check no longer assumes curl on FreeBSD, where it is not
+  in the base system. On a host that had never installed it every poll
+  failed with "command not found", which is indistinguishable from an app
+  that never became healthy: the blue-green swap timed out and rolled back a
+  release that was serving fine. `os: "freebsd"` now polls with fetch(1),
+  which is in base; it cannot report a status code, so a successful request
+  is mapped onto the "200" the poller compares against.
 
 ### Security
 
