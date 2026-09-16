@@ -27,10 +27,10 @@ defmodule Xamal.Commands.RcDTest do
       assert content =~ ~s(name="my_app_4000")
       assert content =~ ~s(rcvar="my_app_4000_enable")
       assert content =~ ~s(command="/usr/sbin/daemon")
-      assert content =~ "-P ${pidfile}"
-      assert content =~ "-p ${child_pidfile}"
-      assert content =~ "-R 5"
-      assert content =~ "-u deploy"
+      assert content =~ "--supervisor-pidfile ${pidfile}"
+      assert content =~ "--child-pidfile ${child_pidfile}"
+      assert content =~ "--restart-delay 5"
+      assert content =~ "--user deploy"
       assert content =~ "/opt/xamal/my-app/current/bin/my_app start"
       assert content =~ "PORT=4000"
       assert content =~ "RELEASE_NODE=my_app_4000"
@@ -71,18 +71,29 @@ defmodule Xamal.Commands.RcDTest do
       assert prestart_index < logfile_install_index
     end
 
-    test "-u defaults to ssh.user when release.run_as is unset" do
+    test "--user defaults to ssh.user when release.run_as is unset" do
       content = RcD.generate_script_content(@config, 4000)
-      assert content =~ "-u deploy"
+      assert content =~ "--user deploy"
     end
 
-    test "-u is release.run_as when set, and the pidfile dir is owned by it" do
+    test "--user is release.run_as when set, and the pidfile dir is owned by it" do
       config = %{@config | release: %{@config.release | run_as: "app"}}
       content = RcD.generate_script_content(config, 4000)
 
-      assert content =~ "-u app"
-      refute content =~ "-u deploy"
+      assert content =~ "--user app"
+      refute content =~ "--user deploy"
       assert content =~ ~s(install -d -o app -g app "/var/run/${name}")
+    end
+
+    test "daemon(8) is told to reopen its output file on SIGHUP" do
+      # The supervisor holds the --output-file descriptor for the life of the
+      # service, so without --sighup an external rotator renaming the file
+      # leaves it writing into the rotated inode - silently, with the new log
+      # staying empty. The host's newsyslog entry signals the supervisor
+      # pidfile, not the child one, for the same reason.
+      content = RcD.generate_script_content(@config, 4000)
+
+      assert content =~ "--output-file ${logfile} --sighup"
     end
 
     test "the log directory and logfile stay owned by ssh.user even when run_as differs" do

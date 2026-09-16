@@ -13,35 +13,51 @@ defmodule Xamal.Commands.RcD do
 
   2. **No native restart-on-failure.** rc.d itself doesn't supervise
      processes, so each script runs the release under `daemon(8)` as
-     `/usr/sbin/daemon -R 5 ...` (crash → restart after 5s, matching
-     systemd's `RestartSec=5`). Per daemon(8): `-P` records the *supervisor's*
-     PID (not the child's) — this is what must go in rc.subr's `pidfile` var,
-     because signaling the child's PID would just cause `-R` to restart it
-     out from under `service stop`. daemon(8) forwards SIGTERM it receives to
-     the child before exiting.
+     `/usr/sbin/daemon --restart-delay 5 ...` (crash → restart after 5s,
+     matching systemd's `RestartSec=5`). Per daemon(8):
+     `--supervisor-pidfile` records the *supervisor's* PID (not the child's)
+     — this is what must go in rc.subr's `pidfile` var, because signaling the
+     child's PID would just cause the restart delay to bring it back up out
+     from under `service stop`. daemon(8) forwards SIGTERM it receives to the
+     child before exiting.
 
   A third, related gap: rc.subr's default `stop_cmd` sends `sig_stop` (TERM)
   and waits on the pid indefinitely via `wait_for_pids` — no timeout, no
   SIGKILL escalation (unlike systemd's `TimeoutStopSec`). Each script defines
   a custom `stop_cmd` that waits up to `drain_timeout` seconds after TERM,
-  then SIGKILLs the supervisor and (via a second `-p` child pidfile) the
+  then SIGKILLs the supervisor and (via a second `--child-pidfile`) the
   release process directly, so a wedged release can't hang a blue-green swap
   forever.
 
   Output that would go to the systemd journal instead goes to
-  `<service_dir>/log/<name>.log` via daemon(8)'s `-o`; see
+  `<service_dir>/log/<name>.log` via daemon(8)'s `--output-file`; see
   `Xamal.Commands.App.logs/2` for how that's read back. `daemon(8)` opens
-  that file while still running as root (it only drops to `-u <run_as>`
-  for the *child* it forks+execs, not itself), so if the file doesn't
-  already exist it gets created root-owned, mode 600 — unreadable by
-  `ssh.user` (and so by `App.logs/2`, which tails it as `ssh.user`, not
+  that file while still running as root (it only drops to `--user
+  <run_as>` for the *child* it forks+execs, not itself), so if the file
+  doesn't already exist it gets created root-owned, mode 600 — unreadable
+  by `ssh.user` (and so by `App.logs/2`, which tails it as `ssh.user`, not
   root). `${name}_prestart()` pre-creates it owned by `ssh.user` first to
   avoid that; deliberately `ssh.user`, not `run_as` — whoever reads logs
   back is `ssh.user`, and daemon(8) opening it as root doesn't care who
   it's pre-owned by either way.
 
+  `--sighup` goes with it: the *supervisor* holds that descriptor open for
+  the life of the service, so an external rotator (newsyslog(8) and
+  friends) renaming the file underneath it would leave the supervisor
+  writing into the rotated inode forever — silently, with the new log
+  staying empty and the disk space unreclaimed until a restart. With
+  `--sighup`, SIGHUP to the supervisor closes and re-opens `--output-file`
+  instead, which is what makes rotation safe. The signal is consumed by the
+  supervisor; only SIGTERM is forwarded, so the BEAM never sees it.
+
+  `command_args` is spelled in daemon(8)'s long-option form throughout.
+  `--supervisor-pidfile` versus `--child-pidfile` is the reason: as `-P`
+  versus `-p` it's a one-character distinction carrying the whole
+  supervisor-versus-release difference described above, and the rotation
+  config on the host has to name the right one of the two.
+
   `run_as` (`Xamal.Configuration.Release.run_as`, defaults to `ssh.user`)
-  is the `-u` target and owns `/var/run/<name>` (the pidfile directory),
+  is the `--user` target and owns `/var/run/<name>` (the pidfile directory),
   kept in lockstep since that's what daemon(8) actually needs write access
   to under its dropped-privilege identity.
 
@@ -96,7 +112,7 @@ defmodule Xamal.Commands.RcD do
     logfile="#{service_dir}/log/${name}.log"
 
     command="/usr/sbin/daemon"
-    command_args="-P ${pidfile} -p ${child_pidfile} -R #{@restart_delay} -f -o ${logfile} -t ${name} -u #{run_user} #{bin} start"
+    command_args="--supervisor-pidfile ${pidfile} --child-pidfile ${child_pidfile} --restart-delay #{@restart_delay} --close-fds --output-file ${logfile} --sighup --title ${name} --user #{run_user} #{bin} start"
 
     start_precmd="${name}_prestart"
     #{name}_prestart()
