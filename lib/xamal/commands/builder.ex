@@ -17,6 +17,8 @@ defmodule Xamal.Commands.Builder do
 
     combine([
       ["MIX_ENV=#{mix_env}", "mix", "deps.get", "--only", mix_env],
+      # Before assets.deploy: colocated hooks are written during compile.
+      ["MIX_ENV=#{mix_env}", "mix", "compile"],
       ["MIX_ENV=#{mix_env}", "mix", "assets.deploy"],
       ["MIX_ENV=#{mix_env}", "mix", "release", release_name, "--overwrite"]
     ])
@@ -58,6 +60,8 @@ defmodule Xamal.Commands.Builder do
       ["MIX_ENV=#{mix_env}", "mix", "deps.get", "--only", mix_env],
       asset_install_step(:tailwind, mix_env),
       asset_install_step(:esbuild, mix_env),
+      # Before assets.deploy: colocated hooks are written during compile.
+      ["MIX_ENV=#{mix_env}", "mix", "compile"],
       ["MIX_ENV=#{mix_env}", "mix", "assets.deploy"],
       ["MIX_ENV=#{mix_env}", "mix", "release", release_name, "--overwrite"]
     ])
@@ -151,6 +155,7 @@ defmodule Xamal.Commands.Builder do
         "MIX_ENV=#{mix_env} mix deps.compile",
         asset_install_step_string(:tailwind, mix_env),
         asset_install_step_string(:esbuild, mix_env),
+        "MIX_ENV=#{mix_env} mix compile",
         "MIX_ENV=#{mix_env} mix assets.deploy",
         "MIX_ENV=#{mix_env} mix release #{release_name} --overwrite",
         "chown -R $(stat -c '%u:%g' /app) /app/_build /app/deps /app/priv/static"

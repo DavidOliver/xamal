@@ -23,6 +23,7 @@ defmodule Xamal.Commands.BuilderTest do
 
       assert cmd_str =~ "MIX_ENV=prod"
       assert cmd_str =~ "mix deps.get"
+      assert cmd_str =~ "mix compile"
       assert cmd_str =~ "mix release my_app"
       assert cmd_str =~ "--overwrite"
     end
@@ -72,6 +73,7 @@ defmodule Xamal.Commands.BuilderTest do
       assert cmd_str =~ "mix local.hex --if-missing --force"
       assert cmd_str =~ "mix local.rebar --if-missing --force"
       assert cmd_str =~ "MIX_ENV=prod mix deps.get --only prod"
+      assert cmd_str =~ "MIX_ENV=prod mix compile"
       assert cmd_str =~ "MIX_ENV=prod mix assets.deploy"
       assert cmd_str =~ "MIX_ENV=prod mix release my_app --overwrite"
     end
@@ -151,6 +153,7 @@ defmodule Xamal.Commands.BuilderTest do
       assert cmd_str =~ "mix local.rebar --if-missing --force"
       assert cmd_str =~ "MIX_ENV=prod mix deps.get --only prod"
       assert cmd_str =~ "MIX_ENV=prod mix deps.compile"
+      assert cmd_str =~ "MIX_ENV=prod mix compile"
       assert cmd_str =~ "MIX_ENV=prod mix assets.deploy"
       assert cmd_str =~ "MIX_ENV=prod mix release my_app --overwrite"
       assert cmd_str =~ "chown -R"
