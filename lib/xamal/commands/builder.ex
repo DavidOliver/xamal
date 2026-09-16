@@ -21,6 +21,8 @@ defmodule Xamal.Commands.Builder do
 
     [
       ["MIX_ENV=#{mix_env}", "mix", "deps.get", "--only", mix_env],
+      # Before assets.deploy: colocated hooks are written during compile.
+      ["MIX_ENV=#{mix_env}", "mix", "compile"],
       ["MIX_ENV=#{mix_env}", "mix", "assets.deploy"],
       ["MIX_ENV=#{mix_env}", "mix", "release", release_name, "--overwrite"]
     ]

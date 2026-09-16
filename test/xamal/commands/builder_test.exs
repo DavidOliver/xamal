@@ -26,6 +26,13 @@ defmodule Xamal.Commands.BuilderTest do
       assert cmd_str =~ "mix release my_app"
       assert cmd_str =~ "--overwrite"
     end
+
+    test "compiles before assets.deploy, which needs the colocated hooks" do
+      cmd_str = Enum.join(Builder.build_release(@config), " ")
+
+      assert cmd_str =~
+               "MIX_ENV=prod mix compile && MIX_ENV=prod mix assets.deploy"
+    end
   end
 
   describe "build_release_remote/1" do
