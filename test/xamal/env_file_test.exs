@@ -4,17 +4,24 @@ defmodule Xamal.EnvFileTest do
   alias Xamal.EnvFile
 
   describe "encode/1" do
-    test "generates KEY=value lines" do
+    test "generates quoted KEY=value lines" do
       env = %{"FOO" => "bar", "BAZ" => "qux"}
       result = EnvFile.encode(env)
-      assert result =~ "BAZ=qux\n"
-      assert result =~ "FOO=bar\n"
+      assert result =~ ~s(BAZ="qux"\n)
+      assert result =~ ~s(FOO="bar"\n)
+    end
+
+    # The reason for quoting at all: the file is sourced by sh, so an
+    # unquoted value would end at the first space.
+    test "keeps values containing spaces in one assignment" do
+      assert EnvFile.encode(%{"ERL_FLAGS" => "+S 2:2 +SDio 2"}) ==
+               ~s(ERL_FLAGS="+S 2:2 +SDio 2"\n)
     end
 
     test "sorts keys alphabetically" do
       env = %{"Z" => "1", "A" => "2"}
       result = EnvFile.encode(env)
-      assert result == "A=2\nZ=1\n"
+      assert result == ~s(A="2"\nZ="1"\n)
     end
 
     test "returns newline for empty map" do
@@ -22,19 +29,29 @@ defmodule Xamal.EnvFileTest do
     end
 
     test "escapes backslashes" do
-      assert EnvFile.encode(%{"K" => "a\\b"}) == "K=a\\\\b\n"
+      assert EnvFile.encode(%{"K" => "a\\b"}) == ~s(K="a\\\\b"\n)
     end
 
     test "escapes newlines" do
-      assert EnvFile.encode(%{"K" => "line1\nline2"}) == "K=line1\\nline2\n"
+      assert EnvFile.encode(%{"K" => "line1\nline2"}) == ~s(K="line1\\nline2"\n)
     end
 
     test "escapes double quotes" do
-      assert EnvFile.encode(%{"K" => ~s(say "hi")}) == ~s(K=say \\"hi\\"\n)
+      assert EnvFile.encode(%{"K" => ~s(say "hi")}) == ~s(K="say \\"hi\\""\n)
+    end
+
+    # Both are still live inside double quotes, so an unescaped one would
+    # expand a variable or run a command when the file is sourced.
+    test "escapes dollar signs" do
+      assert EnvFile.encode(%{"K" => "a$HOME"}) == ~s(K="a\\$HOME"\n)
+    end
+
+    test "escapes backticks" do
+      assert EnvFile.encode(%{"K" => "a`id`"}) == ~s(K="a\\`id\\`"\n)
     end
 
     test "preserves non-ASCII characters" do
-      assert EnvFile.encode(%{"K" => "café"}) == "K=café\n"
+      assert EnvFile.encode(%{"K" => "café"}) == ~s(K="café"\n)
     end
   end
 
@@ -43,14 +60,14 @@ defmodule Xamal.EnvFileTest do
     test "writes env file to disk", %{tmp_dir: dir} do
       path = Path.join(dir, "test.env")
       EnvFile.write!(%{"FOO" => "bar"}, path)
-      assert File.read!(path) == "FOO=bar\n"
+      assert File.read!(path) == ~s(FOO="bar"\n)
     end
 
     @tag :tmp_dir
     test "creates parent directories", %{tmp_dir: dir} do
       path = Path.join([dir, "a", "b", "test.env"])
       EnvFile.write!(%{"X" => "1"}, path)
-      assert File.read!(path) == "X=1\n"
+      assert File.read!(path) == ~s(X="1"\n)
     end
   end
 end
