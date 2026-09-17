@@ -8,6 +8,7 @@ defmodule Xamal.Configuration.Builder do
     :docker,
     :remote,
     :args,
+    :nice,
     volumes: []
   ]
 
@@ -16,6 +17,7 @@ defmodule Xamal.Configuration.Builder do
       local: Map.get(config, "local", true),
       docker: Map.get(config, "docker", false),
       remote: Map.get(config, "remote"),
+      nice: Map.get(config, "nice"),
       args: Map.get(config, "args", %{}),
       volumes: Map.get(config, "volumes", [])
     }
@@ -39,4 +41,16 @@ defmodule Xamal.Configuration.Builder do
 
   def remote?(%__MODULE__{remote: remote}) when is_binary(remote), do: true
   def remote?(_), do: false
+
+  @doc """
+  The `nice(1)` prefix for build commands, or `[]` when none is configured.
+
+  A build is the largest and least latency-sensitive burst of CPU a deploy
+  produces, and with `remote:` it lands on the target host - alongside
+  whatever that host is already serving.
+  """
+  def nice_prefix(%__MODULE__{nice: nice}) when not is_nil(nice),
+    do: ["nice", "-n", to_string(nice)]
+
+  def nice_prefix(_), do: []
 end

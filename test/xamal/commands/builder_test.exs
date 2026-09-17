@@ -105,6 +105,50 @@ defmodule Xamal.Commands.BuilderTest do
     end
   end
 
+  describe "build_release_remote/1 with builder.nice" do
+    @niced %{
+      @config
+      | builder: %Xamal.Configuration.Builder{remote: "build@host", nice: 10}
+    }
+
+    # The assignment has to stay in front: `nice -n 10 MIX_ENV=prod mix
+    # compile` would have nice try to run `MIX_ENV=prod` as the command.
+    test "inserts nice after any leading environment assignments" do
+      cmd_str = @niced |> Builder.build_release_remote() |> Enum.join(" ")
+
+      assert cmd_str =~ "MIX_ENV=prod nice -n 10 mix compile"
+      assert cmd_str =~ "MIX_ENV=prod nice -n 10 mix release my_app --overwrite"
+      refute cmd_str =~ "nice -n 10 MIX_ENV=prod"
+    end
+
+    test "prefixes steps that have no assignment" do
+      cmd_str = @niced |> Builder.build_release_remote() |> Enum.join(" ")
+
+      assert cmd_str =~ "nice -n 10 mix local.hex --if-missing --force"
+    end
+
+    test "leaves the cd unniced" do
+      cmd_str = @niced |> Builder.build_release_remote() |> Enum.join(" ")
+
+      assert cmd_str =~ "cd ~/.xamal/builds/my-app &&"
+      refute cmd_str =~ "nice -n 10 cd"
+    end
+
+    test "nices the tarball, which is the same burst of CPU" do
+      cmd_str = @niced |> Builder.create_tarball_remote() |> Enum.join(" ")
+
+      assert String.starts_with?(cmd_str, "nice -n 10 tar -czf")
+    end
+
+    test "changes nothing when builder.nice is unset" do
+      assert Builder.build_release_remote(@config) ==
+               Builder.build_release_remote(@config)
+
+      refute @config |> Builder.build_release_remote() |> Enum.join(" ") =~ "nice"
+      refute @config |> Builder.create_tarball_remote() |> Enum.join(" ") =~ "nice"
+    end
+  end
+
   describe "create_tarball_remote/1" do
     test "tars the release directory on the build host" do
       cmd = Builder.create_tarball_remote(@config)

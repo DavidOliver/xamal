@@ -385,6 +385,12 @@ defmodule Xamal.Docs do
 
       builder:
         remote: build@build-server
+        nice: 10              # optional: nice level for build commands
+
+    `nice` applies to the build steps and the tarball, on the build host.
+    Use it when the build host also serves traffic - a remote build is a
+    full-core compile, and this is what yields to whatever else is running
+    there.
 
     The default local builder runs `mix release` on your dev machine.
     Docker mode doesn't help when your dev OS differs from the *target*

@@ -53,18 +53,22 @@ defmodule Xamal.Commands.Builder do
     mix_env = config.release.mix_env
     dir = Configuration.build_directory(config)
 
-    combine([
-      ["cd", dir],
-      ["mix", "local.hex", "--if-missing", "--force"],
-      ["mix", "local.rebar", "--if-missing", "--force"],
-      ["MIX_ENV=#{mix_env}", "mix", "deps.get", "--only", mix_env],
-      asset_install_step(:tailwind, mix_env),
-      asset_install_step(:esbuild, mix_env),
-      # Before assets.deploy: colocated hooks are written during compile.
-      ["MIX_ENV=#{mix_env}", "mix", "compile"],
-      ["MIX_ENV=#{mix_env}", "mix", "assets.deploy"],
-      ["MIX_ENV=#{mix_env}", "mix", "release", release_name, "--overwrite"]
-    ])
+    steps =
+      [
+        ["mix", "local.hex", "--if-missing", "--force"],
+        ["mix", "local.rebar", "--if-missing", "--force"],
+        ["MIX_ENV=#{mix_env}", "mix", "deps.get", "--only", mix_env],
+        asset_install_step(:tailwind, mix_env),
+        asset_install_step(:esbuild, mix_env),
+        # Before assets.deploy: colocated hooks are written during compile.
+        ["MIX_ENV=#{mix_env}", "mix", "compile"],
+        ["MIX_ENV=#{mix_env}", "mix", "assets.deploy"],
+        ["MIX_ENV=#{mix_env}", "mix", "release", release_name, "--overwrite"]
+      ]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&apply_nice(&1, config.builder))
+
+    combine([["cd", dir] | steps])
   end
 
   @doc """
@@ -76,7 +80,10 @@ defmodule Xamal.Commands.Builder do
     dir = Configuration.build_directory(config)
     release_dir = "#{dir}/_build/#{mix_env}/rel/#{release_name}"
 
-    ["tar", "-czf", remote_tarball_path(config), "-C", release_dir, "."]
+    apply_nice(
+      ["tar", "-czf", remote_tarball_path(config), "-C", release_dir, "."],
+      config.builder
+    )
   end
 
   @doc """
@@ -190,6 +197,26 @@ defmodule Xamal.Commands.Builder do
   # hex packages themselves define). Calling it unconditionally breaks any
   # project that doesn't depend on one of them — e.g. plain-CSS apps with
   # no `:tailwind` dep — with "The task ... could not be found".
+  # Insert `builder.nice`'s prefix into one build command.
+  #
+  # After any leading `VAR=value` assignments, not before them: `nice -n 10
+  # MIX_ENV=prod mix compile` would have nice try to run `MIX_ENV=prod` as the
+  # command, whereas `MIX_ENV=prod nice -n 10 mix compile` is an assignment
+  # prefix applied to nice, which passes it on to mix.
+  defp apply_nice(command, builder) do
+    case Builder.nice_prefix(builder) do
+      [] ->
+        command
+
+      prefix ->
+        {assignments, rest} = Enum.split_while(command, &assignment?/1)
+        assignments ++ prefix ++ rest
+    end
+  end
+
+  defp assignment?(word) when is_binary(word), do: Regex.match?(~r/^[A-Za-z_]\w*=/, word)
+  defp assignment?(_), do: false
+
   defp asset_install_step(app, mix_env) do
     if dependency_present?(app) do
       ["MIX_ENV=#{mix_env}", "mix", "#{app}.install", "--if-missing"]
