@@ -40,12 +40,15 @@ defmodule Xamal.Commands.Builder do
   the build hangs until it times out.
   """
   def build_release_remote(config) do
-    combine([
-      ["cd", Configuration.build_directory(config)],
-      ["mix", "local.hex", "--if-missing", "--force"],
-      ["mix", "local.rebar", "--if-missing", "--force"]
-      | build_release_steps(config)
-    ])
+    steps =
+      [
+        ["mix", "local.hex", "--if-missing", "--force"],
+        ["mix", "local.rebar", "--if-missing", "--force"]
+        | build_release_steps(config)
+      ]
+      |> Enum.map(&apply_nice(&1, config.builder))
+
+    combine([["cd", Configuration.build_directory(config)] | steps])
   end
 
   @doc """
@@ -57,7 +60,7 @@ defmodule Xamal.Commands.Builder do
   def create_tarball_remote(config) do
     combine([
       ["cd", Configuration.build_directory(config)],
-      create_tarball(config)
+      apply_nice(create_tarball(config), config.builder)
     ])
   end
 
@@ -176,4 +179,24 @@ defmodule Xamal.Commands.Builder do
       remove_file(tarball)
     ])
   end
+
+  # Insert `builder.nice`'s prefix into one build command.
+  #
+  # After any leading `VAR=value` assignments, not before them: `nice -n 10
+  # MIX_ENV=prod mix compile` would have nice try to run `MIX_ENV=prod` as the
+  # command, whereas `MIX_ENV=prod nice -n 10 mix compile` is an assignment
+  # prefix applied to nice, which passes it on to mix.
+  defp apply_nice(command, builder) do
+    case Builder.nice_prefix(builder) do
+      [] ->
+        command
+
+      prefix ->
+        {assignments, rest} = Enum.split_while(command, &assignment?/1)
+        assignments ++ prefix ++ rest
+    end
+  end
+
+  defp assignment?(word) when is_binary(word), do: Regex.match?(~r/^[A-Za-z_]\w*=/, word)
+  defp assignment?(_), do: false
 end
