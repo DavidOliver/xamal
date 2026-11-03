@@ -230,7 +230,11 @@ defmodule Xamal.Commands.RcD do
     scripts =
       Enum.map_join(ports(config), " ", fn port ->
         path = script_path(config, port)
-        staged = "#{path}.xamal-new"
+        # Staged outside rc.d: a file left there by an interrupted deploy
+        # would be picked up by rcorder at boot and by
+        # units_under_other_names/1.
+        staged =
+          "#{Configuration.service_directory(config)}/#{instance_name(config, port)}.rc.xamal-new"
 
         "echo '#{escaped_script(config, port)}' | #{become} tee #{staged} >/dev/null &&" <>
           " if cmp -s #{staged} #{path}; then #{become} rm -f #{staged};" <>

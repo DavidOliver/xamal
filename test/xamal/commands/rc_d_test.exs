@@ -250,7 +250,10 @@ defmodule Xamal.Commands.RcDTest do
       script =
         script
         |> String.replace("/usr/local/etc/rc.d", dir)
+        |> String.replace("/opt/xamal/my-app/my_app_", dir <> "/staging/my_app_")
         |> String.replace("sudo ", "")
+
+      File.mkdir_p!(dir <> "/staging")
 
       {out, 0} = System.cmd("sh", ["-c", "eval #{script}"])
       out
@@ -273,7 +276,15 @@ defmodule Xamal.Commands.RcDTest do
       run_sync(dir)
 
       assert run_sync(dir) == ""
-      assert File.ls!(dir) |> Enum.sort() == ["my_app_4000", "my_app_4001"]
+      assert File.ls!(dir) |> Enum.sort() == ["my_app_4000", "my_app_4001", "staging"]
+      assert File.ls!(dir <> "/staging") == []
+    end
+
+    test "stages outside the rc.d directory" do
+      ["sh", "-c", script] = RcD.sync_unit(@config)
+
+      assert script =~ "tee /opt/xamal/my-app/my_app_4000.rc.xamal-new"
+      refute script =~ "rc.d/my_app_4000.xamal-new"
     end
   end
 
