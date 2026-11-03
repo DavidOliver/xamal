@@ -6,8 +6,49 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- FreeBSD support: `os: "freebsd"` targets rc.d and `daemon(8)` instead of
+  systemd. Bootstrap writes two fixed per-port scripts (rc.d has no template
+  units), each running the release under `daemon(8) -R 5` with a
+  `drain_timeout` SIGKILL fallback on stop. Deploys reconcile the scripts and
+  check for renamed releases and other apps' ports, as they do for systemd
+  units. Scripts source `env/app.sh`. Caddy installs with `pkg` and uses
+  `/usr/local/etc/caddy/Caddyfile` and `CADDY_ADMIN` set to the package's
+  unix socket, release and Caddy logs are read from log files, the release
+  log is reopened on SIGHUP, and the health check polls with `fetch(1)`.
+  See `mix xamal.docs os`.
+- `ssh.become` (default `"sudo"`): the command prefixed onto everything that
+  needs root, e.g. `"doas"`.
+- `ssh.system_ssh`: run commands, logs, uploads, downloads and env file
+  writes through the system `ssh`/`scp` binaries, so ssh-agent and
+  `~/.ssh/config` work. Not used by `mix xamal.iex` or `app.exec -i`. Can't
+  be combined with `ssh.key_data`.
+- `caddy.extra_config` (raw Caddyfile text in the site block),
+  `caddy.reverse_proxy_config` (raw text inside the `reverse_proxy` block),
+  and `caddy.admin` (the admin API address for `CADDY_ADMIN`).
+- `release.run_as`: the account the release runs as, separate from
+  `ssh.user`. Each port instance gets a `run_as`-owned
+  `shared/<port>` directory for `RELEASE_TMP` and `ERL_CRASH_DUMP`.
+- `builder.nice`: run `builder.remote` build steps and the tarball under
+  `nice(1)`.
+
+### Changed
+
+- Env files are uploaded to every host before the `pre-app-boot` hook, so
+  the hook (e.g. migrations) can use them on a first deploy.
+- Builds run `mix compile` before `mix assets.deploy`, so Phoenix colocated
+  hooks exist when esbuild resolves them.
+
 ### Fixed
 
+- Deploy, bootstrap, upload and remove steps now stop with the host, command
+  and reason when a remote command fails, instead of reporting success.
+- `current_version` no longer reports a version for a `current` symlink that
+  doesn't point at a release, which made a failed-boot rollback relink to it.
+- `mix xamal.remove` removes the service directory via `ssh.become`, since
+  `run_as` owns files in it.
+- `mix xamal.redeploy`'s docs said it skips bootstrapping; it skips pruning.
 - `builder.remote` builds no longer hang on a build host without Hex. Xamal
   now runs `mix local.hex --if-missing --force` and `mix local.rebar
   --if-missing --force` before `mix deps.get`, as the Docker build already
