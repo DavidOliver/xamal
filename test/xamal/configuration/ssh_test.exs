@@ -25,6 +25,7 @@ defmodule Xamal.Configuration.SshTest do
       ssh = Ssh.new(%{})
       assert ssh.user == "root"
       assert ssh.become == "sudo"
+      assert ssh.system_ssh == false
       assert ssh.port == 22
       assert ssh.proxy == nil
       assert ssh.log_level == :error
@@ -36,6 +37,10 @@ defmodule Xamal.Configuration.SshTest do
     test "parses a custom become command" do
       ssh = Ssh.new(%{"become" => "doas"})
       assert ssh.become == "doas"
+    end
+
+    test "parses system_ssh" do
+      assert Ssh.new(%{"system_ssh" => true}).system_ssh == true
     end
 
     test "handles nil config" do

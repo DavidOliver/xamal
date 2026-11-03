@@ -12,7 +12,7 @@ If you're familiar with Kamal, you should feel right at home. The operational mo
 
 - **Elixir releases** instead of Docker containers — built with `mix release`, distributed as tarballs
 - **Caddy** instead of kamal-proxy — automatic TLS via Let's Encrypt, zero-downtime blue-green deploys via port switching
-- **Erlang SSH** instead of shelling out to `ssh` — connection pooling via GenServer
+- **Erlang SSH** instead of shelling out to `ssh` — connection pooling via GenServer (opt into shelling out anyway with `ssh: [system_ssh: true]`, e.g. for `ssh-agent`-based auth — see `mix xamal.docs ssh`)
 - **Mix tasks** — deploy from the same toolchain that builds your release
 
 Docker-specific configuration (image, registry, Dockerfile, build args, etc.) is intentionally omitted since releases replace containers entirely.

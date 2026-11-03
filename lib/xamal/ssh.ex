@@ -49,9 +49,21 @@ defmodule Xamal.SSH do
   @doc """
   Execute a shell command string on a remote host.
   Returns {:ok, output} or {:error, reason}.
+
+  Uses Erlang's `:ssh` by default; shells out to the system `ssh` binary
+  instead when `ssh.system_ssh` is set (see `Xamal.Configuration.Ssh`).
   """
   def execute(host, command, opts \\ []) when is_binary(command) do
     ssh_config = Keyword.get(opts, :ssh_config, %Ssh{})
+
+    if ssh_config.system_ssh do
+      execute_via_system_ssh(host, command, ssh_config)
+    else
+      execute_via_erlang_ssh(host, command, ssh_config, opts)
+    end
+  end
+
+  defp execute_via_erlang_ssh(host, command, ssh_config, opts) do
     timeout = Keyword.get(opts, :timeout, 30_000)
     hostname = Host.hostname(host)
     port = Host.port(host, ssh_config)
@@ -73,6 +85,60 @@ defmodule Xamal.SSH do
     end
   end
 
+  defp execute_via_system_ssh(host, command, ssh_config) do
+    args = system_ssh_args(ssh_config, Host.hostname(host), Host.port(host, ssh_config))
+
+    case System.cmd("ssh", args ++ [command], stderr_to_stdout: true) do
+      {output, 0} -> {:ok, String.trim(output)}
+      {output, code} -> {:error, {:exit_status, code, output}}
+    end
+  end
+
+  @doc """
+  The argument list for a system `ssh` call with `ssh.system_ssh`, up to and
+  including the `user@host` destination; the caller appends the command.
+
+  `ssh_flags/2` plus what only applies when every connection goes through the
+  system binary: `-F /dev/null` for `ssh.config: false`, and `ConnectTimeout`
+  from `ssh.connect_timeout`.
+  """
+  def system_ssh_args(ssh_config, hostname, port) do
+    ssh_flags(ssh_config, port) ++
+      system_only_flags(ssh_config) ++ ["#{ssh_config.user}@#{hostname}"]
+  end
+
+  defp system_only_flags(ssh_config) do
+    config = if ssh_config.config == false, do: ["-F", "/dev/null"], else: []
+
+    timeout =
+      case ssh_config.connect_timeout do
+        ms when is_integer(ms) -> ["-o", "ConnectTimeout=#{max(div(ms, 1000), 1)}"]
+        _ -> []
+      end
+
+    config ++ timeout
+  end
+
+  @doc """
+  The argument list for a system `scp` call with `ssh.system_ssh`.
+  `remote_path` is `user@host:path`, as either source or destination.
+  """
+  def system_scp_args(ssh_config, port, source, destination) do
+    scp_flags(ssh_config, port) ++ system_only_flags(ssh_config) ++ [source, destination]
+  end
+
+  defp system_scp(ssh_config, port, source, destination) do
+    case System.cmd("scp", system_scp_args(ssh_config, port, source, destination),
+           stderr_to_stdout: true
+         ) do
+      {_, 0} -> :ok
+      {output, code} -> {:error, {:scp_failed, code, String.trim(output)}}
+    end
+  end
+
+  defp scp_remote(ssh_config, hostname, remote_path),
+    do: "#{ssh_config.user}@#{hostname}:#{sftp_path(remote_path)}"
+
   @doc """
   Upload a file to a remote host.
 
@@ -92,7 +158,18 @@ defmodule Xamal.SSH do
     # Use scp only when both an on-disk key and the scp binary are available.
     # A missing scp binary falls back to SFTP instead of raising :enoent, so
     # the upload still succeeds (just slower) and the contract is preserved.
-    case key_file(ssh_config) do
+    # system_ssh always uses scp: SFTP over Erlang's :ssh can't use the agent.
+    case upload_transport(ssh_config) do
+      :system_ssh ->
+        with :ok <-
+               system_scp(
+                 ssh_config,
+                 port,
+                 local_path,
+                 scp_remote(ssh_config, hostname, remote_path)
+               ),
+             do: {:ok, remote_path}
+
       {:ok, key_path} ->
         if scp_available?() do
           upload_via_scp(key_path, ssh_config, hostname, port, local_path, remote_path)
@@ -129,8 +206,60 @@ defmodule Xamal.SSH do
     port = Host.port(host, ssh_config)
     sftp_opts = [mode: Keyword.get(opts, :mode), timeout: Keyword.get(opts, :timeout, 30_000)]
 
-    write_via_sftp_pooled(ssh_config, hostname, port, content, remote_path, sftp_opts)
+    if ssh_config.system_ssh do
+      write_via_system_scp(host, ssh_config, content, remote_path, Keyword.get(opts, :mode))
+    else
+      write_via_sftp_pooled(ssh_config, hostname, port, content, remote_path, sftp_opts)
+    end
   end
+
+  # With system_ssh there is no SFTP channel to set the mode on before the
+  # content arrives, so create the file (or tighten an existing one) with the
+  # mode first, then scp over it: scp keeps an existing file's mode. The
+  # content goes through a local file in a 0700 directory, never a command line.
+  defp write_via_system_scp(host, ssh_config, content, remote_path, mode) do
+    hostname = Host.hostname(host)
+    port = Host.port(host, ssh_config)
+    dir = Path.join(System.tmp_dir!(), "xamal-#{System.unique_integer([:positive])}")
+    local_path = Path.join(dir, Path.basename(remote_path))
+
+    try do
+      with :ok <- File.mkdir_p(dir),
+           :ok <- File.chmod(dir, 0o700),
+           :ok <- File.write(local_path, content),
+           :ok <- File.chmod(local_path, mode || 0o600),
+           {:ok, _} <- prepare_remote_mode(host, remote_path, mode, ssh_config),
+           :ok <-
+             system_scp(
+               ssh_config,
+               port,
+               local_path,
+               scp_remote(ssh_config, hostname, remote_path)
+             ) do
+        {:ok, remote_path}
+      else
+        {:error, reason} -> {:error, {:scp_write_failed, remote_path, reason}}
+      end
+    after
+      File.rm_rf(dir)
+    end
+  end
+
+  defp prepare_remote_mode(_host, _remote_path, nil, _ssh_config), do: {:ok, ""}
+
+  defp prepare_remote_mode(host, remote_path, mode, ssh_config) do
+    path = Xamal.Utils.shell_escape(remote_path)
+    octal = Integer.to_string(mode, 8)
+
+    execute_via_system_ssh(
+      host,
+      "(umask 077 && : >> #{path}) && chmod #{octal} #{path}",
+      ssh_config
+    )
+  end
+
+  defp upload_transport(%Ssh{system_ssh: true}), do: :system_ssh
+  defp upload_transport(ssh_config), do: key_file(ssh_config)
 
   defp scp_available?, do: System.find_executable("scp") != nil
 
@@ -169,6 +298,9 @@ defmodule Xamal.SSH do
 
     with :ok <- ensure_parent_directory(local_path) do
       case scp_key_for_download(ssh_config) do
+        :system_ssh ->
+          download_via_system_scp(ssh_config, hostname, port, remote_path, local_path)
+
         {:ok, key_path} ->
           download_via_scp(key_path, ssh_config, hostname, port, remote_path, local_path)
 
@@ -179,12 +311,20 @@ defmodule Xamal.SSH do
   end
 
   # scp is only usable with an on-disk key *and* the binary present; either
-  # missing falls back to SFTP, same as upload/4.
+  # missing falls back to SFTP, same as upload/4. system_ssh always uses scp.
+  defp scp_key_for_download(%Ssh{system_ssh: true}), do: :system_ssh
+
   defp scp_key_for_download(ssh_config) do
     case key_file(ssh_config) do
       {:ok, key_path} -> if scp_available?(), do: {:ok, key_path}, else: :none
       :none -> :none
     end
+  end
+
+  defp download_via_system_scp(ssh_config, hostname, port, remote_path, local_path) do
+    remote = scp_remote(ssh_config, hostname, remote_path)
+
+    with :ok <- system_scp(ssh_config, port, remote, local_path), do: {:ok, local_path}
   end
 
   defp ensure_parent_directory(local_path) do
@@ -267,9 +407,17 @@ defmodule Xamal.SSH do
   `BatchMode=yes` fails fast with a clear error instead of hanging on a
   passphrase prompt that, invoked this way, has nowhere to be shown.
   """
-  def ssh_flags(ssh_config, port) do
+  def ssh_flags(ssh_config, port), do: transport_flags(ssh_config, "-p", port)
+
+  @doc """
+  Like `ssh_flags/2`, for the system `scp` binary, which takes the port as
+  `-P`.
+  """
+  def scp_flags(ssh_config, port), do: transport_flags(ssh_config, "-P", port)
+
+  defp transport_flags(ssh_config, port_flag, port) do
     flags = [
-      "-p",
+      port_flag,
       to_string(port),
       "-o",
       "BatchMode=yes",
@@ -448,6 +596,27 @@ defmodule Xamal.SSH do
   """
   def streaming_exec(host, command, opts \\ []) do
     ssh_config = Keyword.get(opts, :ssh_config, %Ssh{})
+
+    if ssh_config.system_ssh do
+      streaming_exec_via_system_ssh(host, command, ssh_config)
+    else
+      streaming_exec_via_erlang_ssh(host, command, ssh_config, opts)
+    end
+  end
+
+  defp streaming_exec_via_system_ssh(host, command, ssh_config) do
+    args = system_ssh_args(ssh_config, Host.hostname(host), Host.port(host, ssh_config))
+
+    case System.cmd("ssh", args ++ [command],
+           stderr_to_stdout: true,
+           into: IO.stream(:stdio, :line)
+         ) do
+      {_, 0} -> :ok
+      {_, code} -> {:error, {:exit_status, code, ""}}
+    end
+  end
+
+  defp streaming_exec_via_erlang_ssh(host, command, ssh_config, opts) do
     timeout = Keyword.get(opts, :timeout, :infinity)
     hostname = Host.hostname(host)
     port = Host.port(host, ssh_config)
