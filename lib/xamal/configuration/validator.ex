@@ -14,6 +14,7 @@ defmodule Xamal.Configuration.Validator do
     validate_ssh_proxy!(config)
     validate_os!(config)
     validate_ssh!(config)
+    validate_rc_require!(config)
     :ok
   end
 
@@ -134,6 +135,18 @@ defmodule Xamal.Configuration.Validator do
       raise ArgumentError, "Unsupported os: #{inspect(os)}. Must be \"linux\" or \"freebsd\""
     end
   end
+
+  # Each name is written verbatim into the rc.d scripts' `# REQUIRE:` line,
+  # so anything beyond an rc.d service name could break or extend the script.
+  defp validate_rc_require!(%{release: %{rc_require: names}}) do
+    unless is_list(names) and Enum.all?(names, &rc_name?/1) do
+      raise ArgumentError,
+            "release.rc_require must be a list of rc.d service names, " <>
+              "e.g. [\"postgresql\"], got: #{inspect(names)}"
+    end
+  end
+
+  defp rc_name?(name), do: is_binary(name) and Regex.match?(~r/^[A-Za-z0-9_.-]+$/, name)
 
   defp validate_ssh!(config) do
     ssh = config.ssh

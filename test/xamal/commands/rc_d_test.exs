@@ -35,6 +35,19 @@ defmodule Xamal.Commands.RcDTest do
       assert content =~ "run_rc_command"
     end
 
+    test "requires only NETWORKING by default" do
+      content = RcD.generate_script_content(@config, 4000)
+
+      assert content =~ ~r/^# REQUIRE: NETWORKING$/m
+    end
+
+    test "adds release.rc_require to the REQUIRE line" do
+      config = %{@config | release: %{@config.release | rc_require: ["postgresql", "caddy"]}}
+      content = RcD.generate_script_content(config, 4001)
+
+      assert content =~ ~r/^# REQUIRE: NETWORKING postgresql caddy$/m
+    end
+
     test "uses drain_timeout from config in the custom stop_cmd" do
       config = %{@config | raw_config: Map.put(@config.raw_config, "drain_timeout", 10)}
       content = RcD.generate_script_content(config, 4000)

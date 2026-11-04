@@ -32,6 +32,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `shared/<port>` directory for `RELEASE_TMP` and `ERL_CRASH_DUMP`.
 - `builder.nice`: run `builder.remote` build steps and the tarball under
   `nice(1)`.
+- `release.rc_require`: rc.d services added to the FreeBSD port scripts'
+  `# REQUIRE:` line, so the release starts after them and stops before them,
+  including when a jail is stopped.
 
 ### Changed
 

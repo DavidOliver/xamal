@@ -93,12 +93,13 @@ defmodule Xamal.Commands.RcD do
     # every value. app.env is in systemd's format, where $ and ` stay live.
     env_file = "#{Configuration.env_directory(config)}/app.sh"
     run_dir = "#{Configuration.shared_directory(config)}/#{port}"
+    require = Enum.join(["NETWORKING" | config.release.rc_require], " ")
 
     """
     #!/bin/sh
     #
     # PROVIDE: #{name}
-    # REQUIRE: NETWORKING
+    # REQUIRE: #{require}
     # KEYWORD: shutdown
 
     . /etc/rc.subr

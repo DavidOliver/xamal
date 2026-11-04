@@ -31,6 +31,21 @@ defmodule Xamal.Configuration.ReleaseTest do
       assert release.run_as == nil
     end
 
+    test "rc_require defaults to none" do
+      release = Release.new(%{"name" => "my_app"}, %{"service" => "my-app"})
+
+      assert release.rc_require == []
+    end
+
+    test "parses rc_require when set" do
+      release =
+        Release.new(%{"name" => "my_app", "rc_require" => ["postgresql"]}, %{
+          "service" => "my-app"
+        })
+
+      assert release.rc_require == ["postgresql"]
+    end
+
     test "parses run_as when set" do
       release =
         Release.new(%{"name" => "my_app", "run_as" => "app"}, %{"service" => "my-app"})

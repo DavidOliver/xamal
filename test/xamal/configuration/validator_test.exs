@@ -87,6 +87,23 @@ defmodule Xamal.Configuration.ValidatorTest do
       end
     end
 
+    test "accepts release.rc_require of rc.d service names" do
+      config =
+        Configuration.new(
+          Map.put(@valid_config, "release", %{"rc_require" => ["postgresql", "caddy"]})
+        )
+
+      assert config.release.rc_require == ["postgresql", "caddy"]
+    end
+
+    test "rejects release.rc_require entries that aren't rc.d service names" do
+      for names <- ["postgresql", ["postgresql caddy"], ["pg\n. /tmp/x"], [:postgresql], [""]] do
+        assert_raise ArgumentError, ~r/release.rc_require/, fn ->
+          Configuration.new(Map.put(@valid_config, "release", %{"rc_require" => names}))
+        end
+      end
+    end
+
     test "accepts system_ssh alone" do
       config =
         Configuration.new(Map.put(@valid_config, "ssh", %{"system_ssh" => true}))

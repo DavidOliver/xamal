@@ -353,6 +353,7 @@ defmodule Xamal.Docs do
       release:
         name: my_app          # Mix release name (default: service name underscored)
         mix_env: prod         # Mix environment (default: prod)
+        rc_require: [postgresql]  # FreeBSD only: rc.d services it needs (default: none)
 
     The release name should match your mix.exs release configuration.
     Xamal builds with `MIX_ENV=<mix_env> mix release <name>` and
@@ -362,6 +363,13 @@ defmodule Xamal.Docs do
     every deploy updates from config. Changing the name is a migration:
     deploy refuses while a unit under the old name exists, and prints the
     commands to remove it before bootstrapping under the new name.
+
+    `rc_require` adds to the `# REQUIRE: NETWORKING` line of the FreeBSD
+    rc.d scripts. rcorder(8) then starts the release after those services at
+    boot, and `rc.shutdown` - which also stops a jail - stops it before them,
+    so its database outlives it. List services the release depends on, such
+    as `postgresql`, or the proxy in front of it. Each deploy rewrites the
+    scripts, so a change takes effect at the next deploy.
     """)
   end
 
