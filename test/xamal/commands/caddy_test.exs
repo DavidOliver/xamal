@@ -245,7 +245,7 @@ defmodule Xamal.Commands.CaddyTest do
       cmd_str = Enum.join(Caddy.enable(@freebsd_config), " ")
 
       assert cmd_str =~ "sudo sysrc caddy_enable=YES"
-      assert cmd_str =~ "service caddy status || sudo service caddy start"
+      assert cmd_str =~ "sudo service caddy status || sudo service caddy start"
     end
 
     test "uses ssh.become for privilege escalation" do

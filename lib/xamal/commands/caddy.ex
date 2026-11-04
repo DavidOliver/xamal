@@ -142,7 +142,7 @@ defmodule Xamal.Commands.Caddy do
     if Configuration.freebsd?(config) do
       combine([
         [become, "sysrc", "caddy_enable=YES"],
-        any([["service", "caddy", "status"], [become, "service", "caddy", "start"]])
+        any([[become, "service", "caddy", "status"], [become, "service", "caddy", "start"]])
       ])
     else
       [become, "systemctl", "enable", "--now", "caddy"]
